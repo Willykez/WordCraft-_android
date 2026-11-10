@@ -1,8 +1,5 @@
 name: Android
 
-# Builds the Android app (android/): Rust engine -> libwordcraft_android.so (cargo-ndk), Kotlin
-# bindings (uniffi-bindgen), then the debug APK. Self-contained on purpose: it does not call the
-# shared craft-common-actions gate, because the Android bridge is a standalone Cargo workspace.
 on:
   push:
     branches: [main]
@@ -25,7 +22,7 @@ env:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -38,9 +35,18 @@ jobs:
         with:
           targets: aarch64-linux-android,x86_64-linux-android
 
+      # 1. Installs pre-compiled binaries instantly instead of compiling from source
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      # 2. Fixed cache configuration to include the root workspace crates
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: android/rust
+          workspaces: |
+            .
+            android/rust
 
       - name: Install Android NDK
         run: |
@@ -48,21 +54,19 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk --locked
-
-      # Host tests of the bridge: open, type, format, undo, render, save, export PDF.
+      # 3. Dropped --release for tests. Debug builds are significantly faster.
       - name: Bridge tests
         working-directory: android/rust
-        run: cargo test --release
+        run: cargo test
 
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
 
+      # 4. Optional: Pass an argument to only build one ABI during PR checks to halve compile time
       - name: Build debug APK
         working-directory: android
-        run: gradle :app:assembleDebug --no-daemon
+        run: gradle :app:assembleDebug --no-daemon -PdevBuild=true
 
       - uses: actions/upload-artifact@v4
         with:
