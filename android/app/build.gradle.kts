@@ -24,13 +24,16 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    
+    // 1. Explicitly add the bindings directory to the main source set inside the android block
+    sourceSets {
+        getByName("main") {
+            java.srcDir(layout.buildDirectory.dir("generated/uniffi/kotlin"))
+        }
+    }
 }
 
 // ---- Rust engine -------------------------------------------------------------------------------
-// 1. cargo-ndk builds libwordcraft_android.so for each ABI into src/main/jniLibs.
-// 2. uniffi-bindgen reads the UniFFI metadata from that library and writes the Kotlin bindings.
-// Needs: rustup targets (aarch64-linux-android, x86_64-linux-android), `cargo install cargo-ndk`,
-// and ANDROID_NDK_HOME pointing at an installed NDK.
 val rustDir = rootProject.layout.projectDirectory.dir("rust").asFile
 val jniLibs = layout.projectDirectory.dir("src/main/jniLibs").asFile
 val bindingsDir = layout.buildDirectory.dir("generated/uniffi/kotlin").get().asFile
@@ -48,10 +51,18 @@ val uniffiBindgen = tasks.register<Exec>("uniffiBindgen") {
         "generate", "--library", File(jniLibs, "arm64-v8a/libwordcraft_android.so").path,
         "--language", "kotlin", "--out-dir", bindingsDir.path,
     )
+    
+    // 2. Formally declare this directory as an output so Gradle's cache recognizes the files
+    outputs.dir(bindingsDir)
 }
 
-android.sourceSets.getByName("main").java.srcDir(bindingsDir)
-tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(uniffiBindgen) }
+// 3. Strictly wire the Kotlin and Java compiler tasks to wait for the code generation
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    dependsOn(uniffiBindgen)
+}
+tasks.withType<JavaCompile>().configureEach {
+    dependsOn(uniffiBindgen)
+}
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
@@ -63,6 +74,5 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.core:core-ktx:1.15.0")
-    // UniFFI's generated Kotlin calls the Rust library through JNA.
     implementation("net.java.dev.jna:jna:5.15.0@aar")
 }

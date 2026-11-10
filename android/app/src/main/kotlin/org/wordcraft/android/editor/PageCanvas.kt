@@ -17,7 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -105,7 +104,9 @@ fun PageCanvas(
                 }
             },
     ) {
-        val maxWidthPt = max(1f, pages.maxOfOrNull { it.widthPt } ?: 595f)
+        // Cast to Float to avoid Double vs Float resolution ambiguity from UniFFI properties
+        val maxWidthPt = max(1f, pages.maxOfOrNull { it.widthPt.toFloat() } ?: 595f)
+        
         // dp per point so that zoom 1.0 fills the width with an 8dp gutter.
         val dpPerPt = (maxWidth.value - 16f) / maxWidthPt * zoom
         val horizontal = rememberScrollState()
@@ -144,12 +145,15 @@ private fun PageItem(
 ) {
     val density = LocalDensity.current
     val pxPerPt = with(density) { dpPerPt.dp.toPx() }
-    val widthDp = (page.widthPt * dpPerPt).dp
-    val heightDp = (page.heightPt * dpPerPt).dp
+    
+    // Explicit Float conversions to prevent Kotlin extension ambiguity 
+    val widthDp = (page.widthPt.toFloat() * dpPerPt).dp
+    val heightDp = (page.heightPt.toFloat() * dpPerPt).dp
 
     // Raster at the on-screen size, capped so a pinched-in page stays within memory.
     val rasterScale = (pxPerPt).coerceIn(0.5f, 3.2f)
     var bitmap by remember(index) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    
     // Keep showing the previous bitmap until the new one is ready, so typing doesn't flicker.
     LaunchedEffect(revision, index, (rasterScale * 20).roundToInt()) {
         vm.render(index, rasterScale)?.let { bitmap = it.asImageBitmap() }
@@ -185,10 +189,18 @@ private fun PageItem(
         Canvas(Modifier.fillMaxSize()) {
             bitmap?.let { drawImage(it, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt())) }
             selection.forEach {
-                drawRect(SelectionBlue, Offset(it.x * pxPerPt, it.y * pxPerPt), Size(it.w * pxPerPt, it.h * pxPerPt))
+                drawRect(
+                    SelectionBlue, 
+                    Offset(it.x.toFloat() * pxPerPt, it.y.toFloat() * pxPerPt), 
+                    Size(it.w.toFloat() * pxPerPt, it.h.toFloat() * pxPerPt)
+                )
             }
             if (selection.isEmpty() && caret != null) {
-                drawRect(Color.Black.copy(alpha = blink.value), Offset(caret.x * pxPerPt - 1f, caret.y * pxPerPt), Size(2.2f, caret.height * pxPerPt))
+                drawRect(
+                    Color.Black.copy(alpha = blink.value), 
+                    Offset(caret.x.toFloat() * pxPerPt - 1f, caret.y.toFloat() * pxPerPt), 
+                    Size(2.2f, caret.height.toFloat() * pxPerPt)
+                )
             }
         }
         if (allSelection.isNotEmpty()) SelectionHandles(vm, index, pxPerPt, allSelection)
@@ -206,17 +218,17 @@ private fun SelectionHandles(vm: EditorViewModel, pageIndex: Int, pxPerPt: Float
 
     // Start handle sits under the selection's first line start; end handle under its last line end.
     if (first.page.toInt() == pageIndex) {
-        Handle(first.x * pxPerPt, (first.y + first.h) * pxPerPt, handlePx) { dx, dy ->
-            val nx = first.x + dx / pxPerPt
-            val ny = first.y + first.h / 2 + dy / pxPerPt
-            vm.selectBetween(pageIndex, nx, ny, last.page.toInt(), last.x + last.w - 0.5f, last.y + last.h / 2)
+        Handle(first.x.toFloat() * pxPerPt, (first.y.toFloat() + first.h.toFloat()) * pxPerPt, handlePx) { dx, dy ->
+            val nx = first.x.toFloat() + dx / pxPerPt
+            val ny = first.y.toFloat() + first.h.toFloat() / 2f + dy / pxPerPt
+            vm.selectBetween(pageIndex, nx, ny, last.page.toInt(), last.x.toFloat() + last.w.toFloat() - 0.5f, last.y.toFloat() + last.h.toFloat() / 2f)
         }
     }
     if (last.page.toInt() == pageIndex) {
-        Handle((last.x + last.w) * pxPerPt, (last.y + last.h) * pxPerPt, handlePx) { dx, dy ->
-            val nx = last.x + last.w + dx / pxPerPt
-            val ny = last.y + last.h / 2 + dy / pxPerPt
-            vm.selectBetween(first.page.toInt(), first.x + 0.5f, first.y + first.h / 2, pageIndex, nx, ny)
+        Handle((last.x.toFloat() + last.w.toFloat()) * pxPerPt, (last.y.toFloat() + last.h.toFloat()) * pxPerPt, handlePx) { dx, dy ->
+            val nx = last.x.toFloat() + last.w.toFloat() + dx / pxPerPt
+            val ny = last.y.toFloat() + last.h.toFloat() / 2f + dy / pxPerPt
+            vm.selectBetween(first.page.toInt(), first.x.toFloat() + 0.5f, first.y.toFloat() + first.h.toFloat() / 2f, pageIndex, nx, ny)
         }
     }
 }

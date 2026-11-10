@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope // <-- ADDED THIS
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -90,10 +91,12 @@ fun ColorButton(icon: ImageVector, label: String, onPick: (String) -> Unit, extr
     }
 }
 
+// <-- FIXED: Row changed to RowScope -->
 @Composable
-private fun Group(content: @Composable Row.() -> Unit) = Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, content = content)
+private fun Group(content: @Composable RowScope.() -> Unit) = Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, content = content)
 
 /** The collapsible tab bar at the bottom: thumb-reachable, one row of tools above one row of tabs. */
+@OptIn(ExperimentalMaterial3Api::class) // <-- ADDED to fix SecondaryScrollableTabRow experimental error
 @Composable
 fun BottomToolbar(ui: EditorUiState, vm: EditorViewModel, actions: EditorActions) {
     var dialog by remember { mutableStateOf<String?>(null) }
@@ -137,8 +140,14 @@ private fun HomeTools(ui: EditorUiState, vm: EditorViewModel, openDialog: (Strin
             MenuButton(Icons.Default.FontDownload, st?.font ?: "Font",
                 items = listOf("Roboto", "Noto Serif", "Noto Sans", "Liberation Serif", "Liberation Sans").map { f -> f to { vm.run("format.font", mapOf("name" to f)) } } +
                     ("Other…" to { openDialog("font") }))
-            MenuButton(Icons.Default.FormatSize, st?.size?.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() } ?: "Size",
+            
+            // <-- FIXED: Added explicit casting to ensure modulo calculation doesn't throw a type error when linked to UniFFI -->
+            MenuButton(Icons.Default.FormatSize, st?.size?.let { 
+                val floatVal = (it as Number).toFloat() 
+                if (floatVal % 1f == 0f) floatVal.toInt().toString() else floatVal.toString() 
+            } ?: "Size",
                 items = listOf(8, 9, 10, 11, 12, 14, 16, 18, 24, 36, 48, 72).map { s -> "$s pt" to { vm.run("format.size", mapOf("size" to s)) } } + ("Other…" to { openDialog("size") }))
+            
             ToolButton(Icons.Default.Add, "Larger") { vm.run("format.growFont") }
             ToolButton(Icons.Default.Remove, "Smaller") { vm.run("format.shrinkFont") }
         }
