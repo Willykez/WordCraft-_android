@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
-import uniffi.wordcraft_android.*
 import org.wordcraft.android.editor.EditorViewModel
 import org.wordcraft.android.editor.PageCanvas
 import org.wordcraft.android.editor.TypingSink

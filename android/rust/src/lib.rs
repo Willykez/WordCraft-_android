@@ -27,14 +27,14 @@ const MIN_SCALE: f32 = 0.1;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum BridgeError {
-    #[error("{message}")]
-    Failed { message: String },
+    #[error("{reason}")]
+    Failed { reason: String },
     #[error("this document needs a password (or the password was wrong)")]
     PasswordRequired,
 }
 
 fn fail(message: impl ToString) -> BridgeError {
-    BridgeError::Failed { message: message.to_string() }
+    BridgeError::Failed { reason: message.to_string() }
 }
 
 /// One laid-out page, in points.

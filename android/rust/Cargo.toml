@@ -38,6 +38,8 @@ opt-level = 3
 lto = "thin"
 codegen-units = 16
 debug = 0
-strip = "symbols"
+# "symbols" removes .symtab, which uniffi-bindgen --library needs to find the exported API;
+# AGP strips the packaged .so itself.
+strip = "debuginfo"
 # Session::run turns a panic into an error; keep unwinding so that safety net works.
 panic = "unwind"

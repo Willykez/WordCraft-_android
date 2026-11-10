@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.max
-import uniffi.wordcraft_android.*
 import kotlin.math.roundToInt
 import org.wordcraft.bridge.CaretRect
 import org.wordcraft.bridge.PageInfo
