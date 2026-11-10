@@ -1,0 +1,71 @@
+name: Android
+
+# Builds the Android app (android/): Rust engine -> libwordcraft_android.so (cargo-ndk), Kotlin
+# bindings (uniffi-bindgen), then the debug APK. Self-contained on purpose: it does not call the
+# shared craft-common-actions gate, because the Android bridge is a standalone Cargo workspace.
+on:
+  push:
+    branches: [main]
+    paths: ["android/**", "crates/**", "Cargo.toml", "Cargo.lock", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["android/**", "crates/**", "Cargo.toml", "Cargo.lock", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NDK_VERSION: 27.2.12479018
+  GRADLE_VERSION: 8.10.2
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: android/rust
+
+      - name: Install Android NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      # Host tests of the bridge: open, type, format, undo, render, save, export PDF.
+      - name: Bridge tests
+        working-directory: android/rust
+        run: cargo test --release
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+
+      - name: Build debug APK
+        working-directory: android
+        run: gradle :app:assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wordcraft-android-debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

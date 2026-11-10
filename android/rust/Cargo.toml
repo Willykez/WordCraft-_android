@@ -1,0 +1,43 @@
+# Android bridge for the WordCraft engine: builds libwordcraft_android.so and the Kotlin bindings.
+#
+# This crate is deliberately NOT a member of the root workspace:
+#  * UniFFI's generated scaffolding contains `unsafe`, which the workspace forbids (`unsafe_code`).
+#  * UniFFI is MPL-2.0, which is not on the repository's licence allowlist (AGENTS.md).
+# Keeping it standalone leaves `cargo xtask ci` and the wasm build untouched.
+[package]
+name = "wordcraft-android"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.95"
+description = "UniFFI bridge between the WordCraft engine and a Kotlin / Jetpack Compose Android app"
+
+[workspace] # standalone workspace (see above)
+
+[lib]
+name = "wordcraft_android"
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+wordcraft-engine = { path = "../../crates/engine" }
+wordcraft-fonts = { path = "../../crates/fonts" }
+uniffi = { version = "0.29", features = ["cli"] }
+serde_json = "1"
+thiserror = "2"
+
+# Same as the root workspace: craft-pdf needs the patched krilla (see the root Cargo.toml).
+[patch.crates-io]
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "c5a1cbfb5f9049f9270955caffb5bee5997aebf7" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+debug = 0
+strip = "symbols"
+# Session::run turns a panic into an error; keep unwinding so that safety net works.
+panic = "unwind"
