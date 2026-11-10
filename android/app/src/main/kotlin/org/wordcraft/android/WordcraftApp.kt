@@ -2,6 +2,7 @@ package org.wordcraft.android
 
 import android.app.Application
 import org.wordcraft.bridge.registerFonts
+import uniffi.wordcraft_android.*
 import java.io.File
 import kotlin.concurrent.thread
 

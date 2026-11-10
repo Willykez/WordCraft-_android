@@ -26,11 +26,12 @@ android {
     buildFeatures { compose = true }
     
     // 1. Explicitly add the bindings directory to the main source set inside the android block
-    sourceSets {
+        sourceSets {
         getByName("main") {
-            java.srcDir(layout.buildDirectory.dir("generated/uniffi/kotlin"))
+            kotlin.srcDir(layout.buildDirectory.dir("generated/uniffi/kotlin"))
         }
     }
+
 }
 
 // ---- Rust engine -------------------------------------------------------------------------------

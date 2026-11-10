@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import org.wordcraft.android.editor.EditorUiState
 import org.wordcraft.android.editor.EditorViewModel
 import org.wordcraft.android.editor.ToolbarTab
+import uniffi.wordcraft_android.*
 
 /** Things a toolbar button can ask of the host activity (file pickers, clipboard). */
 interface EditorActions {
