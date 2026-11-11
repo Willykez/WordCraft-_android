@@ -18,6 +18,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.wordcraft.android.WordcraftApp
 import org.wordcraft.android.data.DocumentStore
+import org.wordcraft.android.data.RecentDoc
 import org.wordcraft.android.ui.Cmd
 import org.wordcraft.android.ui.RibbonModel
 import org.wordcraft.bridge.CaretRect
@@ -61,7 +62,12 @@ data class EditorUiState(
 
 class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private val store = DocumentStore(app)
-    val recents get() = store.recents()
+    private val _recents = MutableStateFlow(store.recents())
+    val recents: StateFlow<List<RecentDoc>> = _recents
+    private fun reloadRecents() { _recents.value = store.recents() }
+    fun pinRecent(uri: String) { store.togglePin(uri); reloadRecents() }
+    fun forgetRecent(uri: String) { store.forget(uri); reloadRecents() }
+    fun clearRecents() { store.clear(); reloadRecents() }
 
     /** All engine calls that change state run on one thread, so typed characters keep their order. */
     private val engineThread: CoroutineDispatcher = Executors.newSingleThreadExecutor { Thread(it, "engine") }.asCoroutineDispatcher()
@@ -94,7 +100,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             val bytes = pendingOpen?.takeIf { it.first == uri }?.second ?: store.read(uri)
             val s = MobileSession.open(name, bytes, password)
             pendingOpen = null
-            store.remember(uri, name)
+            store.remember(uri, name, "Opened"); reloadRecents()
             install(s, uri, name)
         } catch (e: org.wordcraft.bridge.BridgeException.PasswordRequired) {
             pendingOpen = uri to store.read(uri)
@@ -125,6 +131,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         launchEngine {
             try {
                 store.write(uri, session!!.save(sourceName)); refresh()
+                store.remember(uri, sourceName, "Saved"); reloadRecents()
                 say("Saved")
             } catch (e: Exception) { say("Save failed: ${e.message}") }
         }
@@ -143,7 +150,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             val s = session ?: return@launchEngine
             val bytes = if (copyOnly) s.export(name) else s.save(name)
             store.write(uri, bytes)
-            if (!copyOnly) { sourceUri = uri; sourceName = name; store.remember(uri, name) }
+            if (!copyOnly) sourceUri = uri.also { sourceName = name }
+            store.remember(uri, name, if (copyOnly) "Exported" else "Saved"); reloadRecents()
             refresh(); say(if (copyOnly) "Exported $name" else "Saved $name")
         } catch (e: Exception) { say("Save failed: ${e.message}") }
     }
@@ -276,7 +284,19 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- internals ---------------------------------------------------------------------------
 
-    private fun launchEngine(block: suspend () -> Unit) { viewModelScope.launch(engineThread) { block() } }
+    /** Every engine call goes through here: a failure becomes a message, never a crash. */
+    private fun launchEngine(block: suspend () -> Unit) {
+        viewModelScope.launch(engineThread) {
+            try {
+                block()
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                runCatching { refresh() }
+                say(e.message ?: "Something went wrong")
+            }
+        }
+    }
 
     private fun refresh() {
         val s = session ?: return

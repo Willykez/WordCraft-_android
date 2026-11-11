@@ -52,6 +52,7 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
                         "save" -> actions.save(); "find" -> vm.openPanel("find")
                     }
                 }
+                if (st?.hasSelection == true) MiniToolbar(ui, d, Modifier.align(Alignment.TopCenter).padding(top = 8.dp, start = 8.dp, end = 8.dp))
                 PanelHost(ui, vm, d, Modifier.fillMaxSize())
                 SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
             }

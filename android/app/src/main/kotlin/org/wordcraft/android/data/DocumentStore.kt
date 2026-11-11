@@ -4,7 +4,13 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 
-data class RecentDoc(val uri: String, val name: String, val openedAt: Long)
+/** One entry in the activity list: what happened to a file (`Opened`, `Saved`, `Exported`) and when. */
+data class RecentDoc(val uri: String, val name: String, val openedAt: Long, val action: String = "Opened", val pinned: Boolean = false) {
+    val extension: String get() = name.substringAfterLast('.', "").lowercase()
+
+    /** Formats the editor can open again; anything else (an exported PDF…) opens in another app. */
+    val editable: Boolean get() = extension in setOf("docx", "docm", "dotx", "odt", "rtf", "txt", "doc", "html", "htm", "md", "")
+}
 
 /** Storage Access Framework I/O plus a small recent-documents list. */
 class DocumentStore(private val ctx: Context) {
@@ -27,16 +33,23 @@ class DocumentStore(private val ctx: Context) {
     fun recents(): List<RecentDoc> =
         (prefs.getString("list", "") ?: "").lines().mapNotNull {
             val p = it.split('\t')
-            if (p.size == 3) RecentDoc(p[0], p[1], p[2].toLongOrNull() ?: 0L) else null
+            if (p.size >= 3) RecentDoc(p[0], p[1], p[2].toLongOrNull() ?: 0L, p.getOrNull(3)?.ifBlank { null } ?: "Opened", p.getOrNull(4) == "1") else null
         }
 
-    fun remember(uri: Uri, name: String) {
-        val all = listOf(RecentDoc(uri.toString(), name, System.currentTimeMillis())) +
-            recents().filter { it.uri != uri.toString() }
-        prefs.edit().putString("list", all.take(20).joinToString("\n") { "${it.uri}\t${it.name.replace('\t', ' ')}\t${it.openedAt}" }).apply()
+    private fun save(list: List<RecentDoc>) {
+        prefs.edit().putString("list", list.joinToString("\n") {
+            "${it.uri}\t${it.name.replace('\t', ' ').replace('\n', ' ')}\t${it.openedAt}\t${it.action}\t${if (it.pinned) "1" else "0"}"
+        }).apply()
     }
 
-    fun forget(uri: String) {
-        prefs.edit().putString("list", recents().filter { it.uri != uri }.joinToString("\n") { "${it.uri}\t${it.name}\t${it.openedAt}" }).apply()
+    /** Newest first; a file already in the list moves to the top and keeps its pin. */
+    fun remember(uri: Uri, name: String, action: String = "Opened") {
+        val old = recents()
+        val pinned = old.firstOrNull { it.uri == uri.toString() }?.pinned ?: false
+        save((listOf(RecentDoc(uri.toString(), name, System.currentTimeMillis(), action, pinned)) + old.filter { it.uri != uri.toString() }).take(60))
     }
+
+    fun togglePin(uri: String) = save(recents().map { if (it.uri == uri) it.copy(pinned = !it.pinned) else it })
+    fun forget(uri: String) = save(recents().filter { it.uri != uri })
+    fun clear() = save(recents().filter { it.pinned })
 }

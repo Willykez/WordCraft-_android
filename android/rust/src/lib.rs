@@ -279,10 +279,11 @@ impl MobileSession {
             .collect()
     }
 
+    /// `page` is 0-based, like the engine's hit-test and like `select_between`.
     /// Put the caret where a tap at (`x`, `y`) points on `page`; with `extend` the selection grows
     /// from where it was instead.
     pub fn tap(&self, page: u32, x: f32, y: f32, extend: bool) -> Result<(), BridgeError> {
-        let params = json!({ "page": page + 1, "x": x, "y": y, "extend": extend });
+        let params = json!({ "page": page, "x": x, "y": y, "extend": extend });
         self.lock().session.run("caret.set", &params).map(|_| ()).map_err(fail)
     }
 
@@ -290,7 +291,7 @@ impl MobileSession {
     pub fn select_word_at(&self, page: u32, x: f32, y: f32) -> Result<(), BridgeError> {
         let mut g = self.lock();
         let s = &mut g.session;
-        s.run("caret.set", &json!({ "page": page + 1, "x": x, "y": y })).map_err(fail)?;
+        s.run("caret.set", &json!({ "page": page, "x": x, "y": y })).map_err(fail)?;
         s.run("select.word", &json!({})).map(|_| ()).map_err(fail)
     }
 
@@ -298,7 +299,7 @@ impl MobileSession {
     pub fn select_paragraph_at(&self, page: u32, x: f32, y: f32) -> Result<(), BridgeError> {
         let mut g = self.lock();
         let s = &mut g.session;
-        s.run("caret.set", &json!({ "page": page + 1, "x": x, "y": y })).map_err(fail)?;
+        s.run("caret.set", &json!({ "page": page, "x": x, "y": y })).map_err(fail)?;
         s.run("select.paragraph", &json!({})).map(|_| ()).map_err(fail)
     }
 

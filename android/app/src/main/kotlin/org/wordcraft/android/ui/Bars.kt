@@ -75,3 +75,23 @@ fun QuickBar(ui: EditorUiState, d: Dispatcher, vm: EditorViewModel, keyboardShow
 @Composable
 private fun QuickIcon(icon: ImageVector, label: String, active: Boolean, enabled: Boolean, onClick: () -> Unit) =
     MiniToggle(icon, label, active, enabled, onClick)
+
+/** Word's mini toolbar: formatting at hand whenever text is selected. */
+@Composable
+fun MiniToolbar(ui: EditorUiState, d: Dispatcher, modifier: Modifier = Modifier) {
+    val st = ui.state ?: return
+    Surface(modifier, shape = RoundedCornerShape(10.dp), color = Color.White, shadowElevation = 10.dp, tonalElevation = 2.dp) {
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Combo(st.font ?: "Calibri", 104, FONTS.map { f -> MenuEntry(f) { d.id("format.font", mapOf("name" to f)) } })
+            Spacer(Modifier.width(4.dp))
+            Combo(st.size?.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() } ?: "11", 48, SIZES.map { s -> MenuEntry("$s") { d.id("format.size", mapOf("size" to s)) } })
+            Tool(ui, d, "format.bold", "Bold", Icons.Default.FormatBold, st.bold)
+            Tool(ui, d, "format.italic", "Italic", Icons.Default.FormatItalic, st.italic)
+            Tool(ui, d, "format.underline", "Underline", Icons.Default.FormatUnderlined, st.underline)
+            ColorMenu("Highlight", Icons.Default.FormatColorFill, ui.isEnabled("format.highlight"), st.highlight, Color(0xFFFFEB3B)) { d.id("format.highlight", mapOf("color" to it)) }
+            ColorMenu("Font color", Icons.Default.FormatColorText, ui.isEnabled("format.color"), st.color ?: "auto", Color.Red) { d.id("format.color", mapOf("color" to it)) }
+            Tool(ui, d, "para.bullets", "Bullets", Icons.Default.FormatListBulleted)
+            Tool(ui, d, "format.clear", "Clear formatting", Icons.Default.FormatClear)
+        }
+    }
+}

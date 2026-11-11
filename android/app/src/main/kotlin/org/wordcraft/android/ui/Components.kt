@@ -2,7 +2,10 @@ package org.wordcraft.android.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -147,3 +150,72 @@ fun PanelSection(title: String, content: @Composable ColumnScope.() -> Unit) {
 }
 
 val OutlineBorder = BorderStroke(1.dp, Color(0xFFCCCCCC))
+
+/** An icon-only button that opens a drop-down (line spacing, change case…). */
+@Composable
+fun MiniMenu(icon: ImageVector, label: String, enabled: Boolean = true, entries: List<MenuEntry>) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            Modifier.height(30.dp).clip(RoundedCornerShape(4.dp)).clickable(enabled = enabled) { open = true }.padding(start = 5.dp, end = 1.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val ink = if (enabled) RibbonInk else RibbonInk.copy(alpha = 0.35f)
+            Icon(icon, label, Modifier.size(20.dp), tint = ink)
+            Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(13.dp), tint = ink)
+        }
+        DropdownMenu(open, { open = false }, Modifier.heightIn(max = 400.dp)) {
+            entries.forEach { e ->
+                DropdownMenuItem(
+                    text = { Text(e.label, fontSize = 14.sp) }, enabled = e.enabled,
+                    trailingIcon = if (e.hint.isNotEmpty()) ({ Text(e.hint, fontSize = 11.sp, color = Color.Gray) }) else null,
+                    onClick = { open = false; e.onClick() },
+                )
+            }
+        }
+    }
+}
+
+/** Word's split button: the icon applies the default, the arrow opens the choices. */
+@Composable
+fun SplitMini(icon: ImageVector, label: String, active: Boolean, enabled: Boolean, entries: List<MenuEntry>, onClick: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        MiniToggle(icon, label, active, enabled, onClick)
+        Box {
+            Box(Modifier.width(14.dp).height(30.dp).clickable(enabled = enabled) { open = true }, contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.KeyboardArrowDown, "$label options", Modifier.size(14.dp), tint = if (enabled) RibbonInk else RibbonInk.copy(alpha = 0.35f))
+            }
+            DropdownMenu(open, { open = false }, Modifier.heightIn(max = 400.dp)) {
+                entries.forEach { e -> DropdownMenuItem(text = { Text(e.label) }, enabled = e.enabled, onClick = { open = false; e.onClick() }) }
+            }
+        }
+    }
+}
+
+/** Insert Table: press and slide over the grid to size it, as in Word. */
+@Composable
+fun TableGridBtn(enabled: Boolean, onPick: (rows: Int, cols: Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    var hr by remember { mutableIntStateOf(0) }
+    var hc by remember { mutableIntStateOf(0) }
+    Box {
+        RBtn("Table ▾", Icons.Default.TableChart, enabled) { hr = 0; hc = 0; open = true }
+        DropdownMenu(open, { open = false }) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Text(if (hr > 0) "$hc × $hr table" else "Insert table", fontSize = 12.sp, color = Color.Gray)
+                Spacer(Modifier.height(6.dp))
+                for (r in 1..8) Row {
+                    for (c in 1..10) Box(
+                        Modifier.padding(1.dp).size(22.dp)
+                            .background(if (r <= hr && c <= hc) WordBlue.copy(alpha = 0.35f) else Color.White)
+                            .border(1.dp, if (r <= hr && c <= hc) WordBlue else Color(0xFFBBBBBB))
+                            .pointerInput(r, c) {
+                                detectTapGestures(onPress = { hr = r; hc = c; tryAwaitRelease() }, onTap = { open = false; onPick(r, c) })
+                            },
+                    )
+                }
+            }
+        }
+    }
+}

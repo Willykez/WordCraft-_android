@@ -12,6 +12,7 @@ private val QUOTED = Regex("\"([^\"]+)\"")
 
 fun parseParams(p: String): List<ParamField> {
     if (p.isBlank() || p.trimStart().startsWith("{}")) return emptyList()
+    val alternatives = Regex("\\}\\s*\\|\\s*\\{").containsMatchIn(p)
     return FIELD.findAll(p).map { m ->
         val hint = m.groupValues[3].trim()
         val h = hint.lowercase()
@@ -23,7 +24,7 @@ fun parseParams(p: String): List<ParamField> {
             h.startsWith("string") || h.startsWith("\"") -> FieldKind.TEXT
             else -> FieldKind.JSON
         }
-        ParamField(m.groupValues[1], m.groupValues[2].isNotEmpty(), hint, kind, options)
+        ParamField(m.groupValues[1], m.groupValues[2].isNotEmpty() || alternatives, hint, kind, options)
     }.toList()
 }
 

@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
         val createDoc = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
             val fmt = pendingFormat
             if (uri != null && fmt != null) {
+                runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
                 // Save-as to docx/odt becomes the document's new home; pdf/txt/html are copies.
                 vm.saveAs(uri, fmt, copyOnly = fmt !in setOf("docx", "odt"))
             }
@@ -109,11 +110,20 @@ class MainActivity : ComponentActivity() {
             BackHandler { vm.closeDocument() }
             EditorScreen(vm, actions)
         } else {
+            val recents by vm.recents.collectAsState()
             HomeScreen(
-                recents = vm.recents,
+                recents = recents,
                 onNew = vm::newDocument,
                 onOpenFile = { openDoc.launch(arrayOf("*/*")) },
-                onOpenRecent = { vm.openDocument(Uri.parse(it.uri)) },
+                onOpenRecent = { r ->
+                    if (r.editable) vm.openDocument(Uri.parse(r.uri))
+                    else runCatching {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(r.uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }.onFailure { vm.say("No app can open ${r.name}") }
+                },
+                onPin = { vm.pinRecent(it.uri) },
+                onRemove = { vm.forgetRecent(it.uri) },
+                onClear = vm::clearRecents,
             )
         }
 
