@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
             override fun save() = vm.save { askLocation("docx") }
             override fun saveCopy(format: String) = askLocation(format)
             private fun askLocation(fmt: String) { pendingFormat = fmt; createDoc.launch(vm.suggestedName(fmt)) }
+            override fun openFile() = openDoc.launch(arrayOf("*/*"))
             override fun pickPicture() = pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             override fun copy(cut: Boolean) = vm.copy(cut) { text ->
                 (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("WordCraft", text))

@@ -182,6 +182,13 @@ impl MobileSession {
         self.lock().session.why_disabled(&command).map(str::to_owned)
     }
 
+    /// Of `ids`, the commands that exist and are enabled at the caret right now (ribbon enabled state).
+    pub fn enabled_among(&self, ids: Vec<String>) -> Vec<String> {
+        let g = self.lock();
+        let s = &g.session;
+        ids.into_iter().filter(|id| s.registry.get(id).is_some() && s.why_disabled(id).is_none()).collect()
+    }
+
     /// Paste text from the Android clipboard. When it is the text WordCraft itself last copied, the
     /// formatted fragment is pasted instead, so Copy/Paste inside the app keeps formatting.
     pub fn paste(&self, system_text: String) -> Result<(), BridgeError> {

@@ -14,9 +14,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import org.wordcraft.android.WordcraftApp
 import org.wordcraft.android.data.DocumentStore
+import org.wordcraft.android.ui.Cmd
+import org.wordcraft.android.ui.RibbonModel
 import org.wordcraft.bridge.CaretRect
 import org.wordcraft.bridge.EditorState
 import org.wordcraft.bridge.MobileSession
@@ -25,8 +28,6 @@ import org.wordcraft.bridge.SelRect
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
-enum class ToolbarTab { HOME, INSERT, LAYOUT, REVIEW, REFERENCES, VIEW }
-
 /** Everything the editor UI draws. The Rust engine owns the document; this is only a view of it. */
 data class EditorUiState(
     val open: Boolean = false,
@@ -34,13 +35,29 @@ data class EditorUiState(
     val state: EditorState? = null,
     val caret: CaretRect? = null,
     val selection: List<SelRect> = emptyList(),
-    val tab: ToolbarTab = ToolbarTab.HOME,
-    val toolbarExpanded: Boolean = true,
+    val tab: String = "Home",
+    val ribbonExpanded: Boolean = true,
     val zoom: Float = 1f,
     val message: String? = null,
     val needsPassword: Boolean = false,
-    val findOpen: Boolean = false,
-)
+    /** Every engine command, grouped like the Word ribbon. */
+    val ribbon: RibbonModel? = null,
+    /** Commands (among those the ribbon is showing) that can run at the caret right now. */
+    val enabled: Set<String> = emptySet(),
+    /** The commands `enabled` was computed for; anything else is assumed available. */
+    val watched: Set<String> = emptySet(),
+    /** Names of the quick styles in the gallery. */
+    val styles: List<String> = emptyList(),
+    /** Open floating panels, back to front. */
+    val panels: List<String> = emptyList(),
+    val backstage: Boolean = false,
+    /** A command waiting for its inputs. */
+    val dialogCmd: Cmd? = null,
+    /** Title and text of a command result worth showing. */
+    val result: Pair<String, String>? = null,
+) {
+    fun isEnabled(id: String) = id !in watched || id in enabled
+}
 
 class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private val store = DocumentStore(app)
@@ -52,6 +69,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private var session: MobileSession? = null
     private var sourceUri: Uri? = null
     private var sourceName: String = "Untitled.docx"
+    private var ribbon: RibbonModel? = null
+    private var watched: List<String> = emptyList()
 
     private val _ui = MutableStateFlow(EditorUiState())
     val ui: StateFlow<EditorUiState> = _ui
@@ -93,8 +112,11 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun install(s: MobileSession, uri: Uri?, name: String) {
         session = s; sourceUri = uri; sourceName = name; pageCache.evictAll()
-        _ui.update { EditorUiState(open = true, tab = it.tab, zoom = 1f) }
+        _ui.update { EditorUiState(open = true, tab = it.tab, ribbonExpanded = it.ribbonExpanded, zoom = 1f) }
+        if (ribbon == null) ribbon = runCatching { RibbonModel.parse(s.commandsJson()) }.getOrNull()
+        watched = ribbon?.watchedIds(_ui.value.tab).orEmpty()
         refresh()
+        loadStyles()
     }
 
     /** Save in place when the file came from a writable URI; otherwise the UI asks for a location. */
@@ -131,13 +153,53 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     // ---- commands ----------------------------------------------------------------------------
 
     /** Run an engine command; a disabled command or bad parameter becomes a short message, never a crash. */
-    fun run(command: String, params: Map<String, Any?> = emptyMap(), then: ((String) -> Unit)? = null) = launchEngine {
+    fun run(command: String, params: Map<String, Any?> = emptyMap(), then: ((String) -> Unit)? = null) =
+        runJson(command, if (params.isEmpty()) "" else JSONObject(params).toString(), then = then)
+
+    fun runJson(command: String, json: String, refreshAfter: Boolean = true, then: ((String) -> Unit)? = null) = launchEngine {
         val s = session ?: return@launchEngine
         try {
-            val out = s.execute(command, if (params.isEmpty()) "" else JSONObject(params).toString())
-            refresh()
+            val out = s.execute(command, json)
+            if (refreshAfter) refresh()
+            if (command.startsWith("styles.")) loadStyles()
             then?.let { withContext(Dispatchers.Main) { it(out) } }
         } catch (e: Exception) { refresh(); say(e.message ?: "Command failed") }
+    }
+
+    /** Read-only call for a panel: no refresh, result delivered on the main thread. */
+    fun query(command: String, json: String = "", onResult: (String) -> Unit) = runJson(command, json, refreshAfter = false, then = onResult)
+
+    fun clipboardText(onResult: (String) -> Unit) = launchEngine {
+        val t = session?.clipboardText().orEmpty()
+        withContext(Dispatchers.Main) { onResult(t) }
+    }
+
+    /** A ribbon command: ask for its inputs first when it has required ones. */
+    fun exec(cmd: Cmd) {
+        if (cmd.needsInput) { _ui.update { it.copy(dialogCmd = cmd) }; return }
+        runJson(cmd.id, "") { out -> showResult(cmd, out) }
+    }
+
+    fun submit(cmd: Cmd, json: String) {
+        dismissDialog()
+        runJson(cmd.id, json) { out -> showResult(cmd, out) }
+    }
+
+    private fun showResult(cmd: Cmd, out: String) {
+        val quiet = cmd.mutates || out.length < 3 || cmd.id.startsWith("view.") || cmd.id.startsWith("caret.") ||
+            cmd.id.startsWith("select.") || cmd.id.endsWith("Pane")
+        if (!quiet) _ui.update { it.copy(result = cmd.label to prettyJson(out)) }
+    }
+
+    private fun prettyJson(t: String): String = runCatching { JSONObject(t).toString(2) }.recoverCatching { JSONArray(t).toString(2) }.getOrDefault(t)
+
+    private fun loadStyles() = launchEngine {
+        val out = runCatching { session?.execute("styles.list", "") }.getOrNull() ?: return@launchEngine
+        val names = runCatching {
+            val a = JSONArray(out)
+            (0 until a.length()).map { a.getJSONObject(it) }.filter { it.optBoolean("quick") }.map { it.getString("name") }
+        }.getOrDefault(emptyList())
+        _ui.update { it.copy(styles = names) }
     }
 
     fun typeText(text: String) {
@@ -178,9 +240,20 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- UI state ----------------------------------------------------------------------------
 
-    fun setTab(t: ToolbarTab) = _ui.update { it.copy(tab = t, toolbarExpanded = if (it.tab == t) !it.toolbarExpanded else true) }
+    /** Tapping the open tab again collapses the ribbon, as in Word. */
+    fun setTab(t: String) {
+        _ui.update { it.copy(tab = t, ribbonExpanded = if (it.tab == t) !it.ribbonExpanded else true) }
+        watched = ribbon?.watchedIds(t).orEmpty()
+        launchEngine { refresh() }
+    }
+    fun toggleRibbon() = _ui.update { it.copy(ribbonExpanded = !it.ribbonExpanded) }
     fun setZoom(z: Float) = _ui.update { it.copy(zoom = z.coerceIn(0.5f, 4f)) }
-    fun setFind(open: Boolean) = _ui.update { it.copy(findOpen = open) }
+    fun openPanel(id: String) = _ui.update { it.copy(panels = it.panels.filter { p -> p != id } + id) }
+    fun closePanel(id: String) = _ui.update { it.copy(panels = it.panels.filter { p -> p != id }) }
+    fun togglePanel(id: String) = if (id in _ui.value.panels) closePanel(id) else openPanel(id)
+    fun showBackstage(show: Boolean) = _ui.update { it.copy(backstage = show) }
+    fun dismissDialog() = _ui.update { it.copy(dialogCmd = null) }
+    fun dismissResult() = _ui.update { it.copy(result = null) }
     fun dismissMessage() = _ui.update { it.copy(message = null) }
     fun dismissPassword() = _ui.update { it.copy(needsPassword = false) }
     fun say(msg: String) = _ui.update { it.copy(message = msg) }
@@ -208,6 +281,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private fun refresh() {
         val s = session ?: return
         val st = s.state()
-        _ui.update { it.copy(pages = s.pages(), state = st, caret = s.caret(), selection = s.selectionRects()) }
+        val en = if (watched.isEmpty()) emptySet() else s.enabledAmong(watched).toSet()
+        _ui.update { it.copy(pages = s.pages(), state = st, caret = s.caret(), selection = s.selectionRects(), ribbon = ribbon, enabled = en, watched = watched.toSet()) }
     }
 }

@@ -1,77 +1,70 @@
 package org.wordcraft.android.ui
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Redo
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Undo
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.style.TextOverflow
 import org.wordcraft.android.editor.EditorViewModel
 import org.wordcraft.android.editor.PageCanvas
 import org.wordcraft.android.editor.TypingSink
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Word-style editor: title bar with Quick Access, tabs, a collapsible ribbon, the pages with floating
+ * panels over them, a status bar and a bottom quick-action bar.
+ */
 @Composable
 fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
     val ui by vm.ui.collectAsState()
+    val d = remember(vm, actions) { Dispatcher(vm, actions) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    var keyboardShown by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
-    var menu by remember { mutableStateOf(false) }
     val st = ui.state
 
-    LaunchedEffect(ui.message) { ui.message?.let { snackbar.showSnackbar(it); vm.dismissMessage() } }
+    val model = ui.ribbon
+    val contextTabs = model?.contextTabs?.filter { t -> model.tabCmds(t).any { it.id in ui.enabled } }.orEmpty()
+    val tab = if (ui.tab in (model?.tabs.orEmpty() + contextTabs)) ui.tab else "Home"
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                navigationIcon = { IconButton(actions::close) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close") } },
-                title = { Text((st?.fileName ?: "Document") + if (st?.dirty == true) " •" else "", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                actions = {
-                    IconButton(vm::undo, enabled = st?.canUndo == true) { Icon(Icons.Default.Undo, "Undo") }
-                    IconButton(vm::redo, enabled = st?.canRedo == true) { Icon(Icons.Default.Redo, "Redo") }
-                    IconButton(actions::save) { Icon(Icons.Default.Save, "Save") }
-                    Box {
-                        IconButton({ menu = true }) { Icon(Icons.Default.MoreVert, "More") }
-                        DropdownMenu(menu, { menu = false }) {
-                            listOf("Save as DOCX" to "docx", "Export as PDF" to "pdf", "Export as ODT" to "odt", "Export as plain text" to "txt", "Export as HTML" to "html")
-                                .forEach { (n, f) -> DropdownMenuItem(text = { Text(n) }, onClick = { menu = false; actions.saveCopy(f) }) }
-                        }
+    LaunchedEffect(ui.message) { ui.message?.let { snackbar.showSnackbar(it); vm.dismissMessage() } }
+    BackHandler(enabled = ui.backstage) { vm.showBackstage(false) }
+
+    Box(Modifier.fillMaxSize().background(RibbonBg)) {
+        Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
+            TitleBar(ui, vm, d, actions)
+            RibbonTabs(ui, tab, contextTabs, vm)
+            AnimatedVisibility(ui.ribbonExpanded) { RibbonBody(ui, tab, d) }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                PageCanvas(
+                    vm = vm, pages = ui.pages, caret = ui.caret, selection = ui.selection,
+                    revision = st?.revision ?: 0uL, zoom = ui.zoom, onZoom = vm::setZoom,
+                    onTapped = { runCatching { focus.requestFocus() }; keyboard?.show(); keyboardShown = true },
+                )
+                TypingSink(vm, focus) { s ->
+                    when (s) {
+                        "copy" -> actions.copy(false); "cut" -> actions.copy(true); "paste" -> actions.paste()
+                        "save" -> actions.save(); "find" -> vm.openPanel("find")
                     }
-                },
-            )
-        },
-        bottomBar = {
-            Column {
-                ContextualBar(ui, vm, actions)
-                if (ui.findOpen) FindBar(vm)
-                BottomToolbar(ui, vm, actions)
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { pad ->
-        Box(Modifier.fillMaxSize().padding(pad)) {
-            PageCanvas(
-                vm = vm, pages = ui.pages, caret = ui.caret, selection = ui.selection,
-                revision = st?.revision ?: 0uL, zoom = ui.zoom, onZoom = vm::setZoom,
-                onTapped = { runCatching { focus.requestFocus() }; keyboard?.show() },
-            )
-            TypingSink(vm, focus) { s ->
-                when (s) {
-                    "copy" -> actions.copy(false); "cut" -> actions.copy(true); "paste" -> actions.paste()
-                    "save" -> actions.save(); "find" -> vm.setFind(true)
                 }
+                PanelHost(ui, vm, d, Modifier.fillMaxSize())
+                SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
+            }
+            StatusBar(ui, vm)
+            QuickBar(ui, d, vm, keyboardShown) {
+                if (keyboardShown) { keyboard?.hide(); keyboardShown = false }
+                else { runCatching { focus.requestFocus() }; keyboard?.show(); keyboardShown = true }
             }
         }
+
+        if (ui.backstage) Backstage(ui, vm, d, actions)
     }
+
+    ui.dialogCmd?.let { c -> ParamDialog(c, onDismiss = vm::dismissDialog, onSubmit = { json -> vm.submit(c, json) }) }
+    ui.result?.let { (title, text) -> ResultDialog(title, text, vm::dismissResult) }
 }
