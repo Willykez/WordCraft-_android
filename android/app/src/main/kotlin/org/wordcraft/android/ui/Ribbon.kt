@@ -30,7 +30,7 @@ private val CURATED: Map<String, Set<String>> = mapOf(
     "Home" to setOf("Clipboard", "Font", "Paragraph", "Styles", "Editing"),
     "Insert" to setOf("Pages", "Tables", "Illustrations", "Header & Footer", "Text", "Links", "Symbols"),
     "Layout" to setOf("Page Setup", "Paragraph"),
-)
+) + CONTEXT_CURATED
 
 /** The ribbon body for one tab: Home, Insert and Layout are hand-laid-out; the rest is built from the engine's registry. */
 @Composable
@@ -41,11 +41,21 @@ fun RibbonBody(ui: EditorUiState, tab: String, d: Dispatcher) {
                 "Home" -> HomeGroups(ui, d)
                 "Insert" -> InsertGroups(ui, d)
                 "Layout" -> LayoutGroups(ui, d)
+                "Table Design" -> TableDesignGroups(ui, d)
+                "Table Layout" -> TableLayoutGroups(ui, d)
+                "Picture Format" -> PictureFormatGroups(ui, d)
             }
             val skip = CURATED[tab].orEmpty()
             ui.ribbon?.groups(tab)?.filter { it.name !in skip }?.forEach { g -> GenericGroup(g, ui, d) }
         }
     }
+}
+
+/** Whether a toggle command is currently on; null for commands that aren't toggles. */
+internal fun toggleState(ui: EditorUiState, id: String): Boolean? = when (id) {
+    "review.trackChanges" -> ui.state?.trackChanges
+    "view.marks" -> ui.state?.showMarks
+    else -> null
 }
 
 internal fun Cmd.entry(ui: EditorUiState, d: Dispatcher) = MenuEntry(label, ui.isEnabled(id), shortcut.substringBefore(" / ")) { d(this) }
@@ -58,9 +68,14 @@ private fun GenericGroup(g: RibbonGroup, ui: EditorUiState, d: Dispatcher) {
     val shown = if (direct.size > 5) direct.take(4) else direct
     val rest = direct.drop(shown.size)
     GroupBox(g.name) {
-        shown.forEach { c -> RBtn(c.label, null, ui.isEnabled(c.id), cmd = c) { d(c) } }
+        shown.forEach { c ->
+            val on = toggleState(ui, c.id)
+            RBtn(c.label, null, ui.isEnabled(c.id), active = on == true, cmd = c) {
+                if (on != null && c.id == "review.trackChanges") d.id(c.id, mapOf("value" to !on)) else d(c)
+            }
+        }
         subs.forEach { (name, cs) ->
-            if (cs.size == 1) RBtn(cs[0].label, null, ui.isEnabled(cs[0].id), cmd = cs[0]) { d(cs[0]) }
+            if (cs.size == 1) RBtn(cs[0].label, null, ui.isEnabled(cs[0].id), active = toggleState(ui, cs[0].id) == true, cmd = cs[0]) { d(cs[0]) }
             else MenuBtn(name.substringAfterLast(" › "), null, cs.map { it.entry(ui, d) }, cmd = cs[0])
         }
         if (rest.isNotEmpty()) MenuBtn("More", Icons.Default.MoreHoriz, rest.map { it.entry(ui, d) })
@@ -82,6 +97,7 @@ internal fun Tool(ui: EditorUiState, d: Dispatcher, id: String, label: String, i
 private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
     val st = ui.state
     fun on(id: String) = ui.isEnabled(id)
+    var paraBorders by remember { mutableStateOf(false) }
 
     // ---- Clipboard
     GroupBox("Clipboard") {
@@ -151,14 +167,15 @@ private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
                 Tool(ui, d, "para.alignCenter", "Center", Icons.Default.FormatAlignCenter, st?.alignment == "center")
                 Tool(ui, d, "para.alignRight", "Align right", Icons.Default.FormatAlignRight, st?.alignment == "right")
                 Tool(ui, d, "para.justify", "Justify", Icons.Default.FormatAlignJustify, st?.alignment == "justify" || st?.alignment == "both")
-                Tool(ui, d, "view.marks", "Show/Hide ¶", Icons.Default.Visibility)
+                Tool(ui, d, "view.marks", "Show/Hide ¶", Icons.Default.Visibility, st?.showMarks == true)
                 Tool(ui, d, "para.sort", "Sort", Icons.Default.SortByAlpha)
+                MiniToggle(Icons.Default.BorderAll, "Borders", false, on("para.borders")) { paraBorders = true }
             }
         }
         val lineIds = ui.ribbon?.tabCmds("Home").orEmpty().filter { it.sub == "Line Spacing" }.map { it.id }
         MoreMenu(
             "Home", "Paragraph",
-            setOf("para.bullets", "para.numbering", "para.outdent", "para.indent", "para.alignLeft", "para.alignCenter", "para.alignRight", "para.justify", "para.lineSpacing", "para.shading", "view.marks", "para.sort") + lineIds,
+            setOf("para.bullets", "para.numbering", "para.outdent", "para.indent", "para.alignLeft", "para.alignCenter", "para.alignRight", "para.justify", "para.lineSpacing", "para.shading", "view.marks", "para.sort", "para.borders") + lineIds,
             ui, d,
         )
     }
@@ -185,6 +202,11 @@ private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
         val select = ui.ribbon?.tabCmds("Home").orEmpty().filter { it.sub == "Select" }
         if (select.isNotEmpty()) MenuBtn("Select", Icons.Default.SelectAll, select.map { it.entry(ui, d) })
         MoreMenu("Home", "Editing", setOf("edit.find", "edit.replace") + select.map { it.id }, ui, d)
+    }
+
+    if (paraBorders) BordersDialog(false, { paraBorders = false }) { k, style, w, c ->
+        paraBorders = false
+        d.id("para.borders", mapOf("kind" to k, "style" to style, "width" to w, "color" to c))
     }
 }
 

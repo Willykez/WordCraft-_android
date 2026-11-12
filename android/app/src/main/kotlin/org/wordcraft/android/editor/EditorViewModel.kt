@@ -19,7 +19,11 @@ import org.json.JSONObject
 import org.wordcraft.android.WordcraftApp
 import org.wordcraft.android.data.DocumentStore
 import org.wordcraft.android.data.RecentDoc
+import org.wordcraft.android.data.Recovery
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import org.wordcraft.android.ui.Cmd
+import org.wordcraft.bridge.ObjRect
 import org.wordcraft.android.ui.RibbonModel
 import org.wordcraft.bridge.CaretRect
 import org.wordcraft.bridge.EditorState
@@ -49,6 +53,8 @@ data class EditorUiState(
     val watched: Set<String> = emptySet(),
     /** Names of the quick styles in the gallery. */
     val styles: List<String> = emptyList(),
+    /** Table styles available for Format as Table. */
+    val tableStyles: List<String> = emptyList(),
     /** Open floating panels, back to front. */
     val panels: List<String> = emptyList(),
     val backstage: Boolean = false,
@@ -56,6 +62,10 @@ data class EditorUiState(
     val dialogCmd: Cmd? = null,
     /** Title and text of a command result worth showing. */
     val result: Pair<String, String>? = null,
+    /** Closing a document with unsaved changes asks Save / Don't save / Cancel. */
+    val closePrompt: Boolean = false,
+    /** The selected picture or shape, for resize handles and the picture toolbar. */
+    val obj: ObjRect? = null,
 ) {
     fun isEnabled(id: String) = id !in watched || id in enabled
 }
@@ -77,6 +87,13 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private var sourceName: String = "Untitled.docx"
     private var ribbon: RibbonModel? = null
     private var watched: List<String> = emptyList()
+    private var autosaveJob: Job? = null
+    private var closeAfterSave = false
+    /** A recovered document stays "unsaved" until the user saves it, even though the engine sees it as clean. */
+    private var unsavedRecovered = false
+
+    private val _recovery = MutableStateFlow(store.recovery())
+    val recovery: StateFlow<Recovery?> = _recovery
 
     private val _ui = MutableStateFlow(EditorUiState())
     val ui: StateFlow<EditorUiState> = _ui
@@ -110,14 +127,71 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun closeDocument() {
-        saveIfDirty()
+    /** Close button / back: ask first when there is anything unsaved. */
+    fun requestClose() {
+        val dirty = _ui.value.state?.dirty == true || unsavedRecovered
+        if (dirty) _ui.update { it.copy(closePrompt = true) } else closeDocument(save = false)
+    }
+
+    fun cancelClose() { closeAfterSave = false; _ui.update { it.copy(closePrompt = false) } }
+
+    fun discardAndClose() = closeDocument(save = false)
+
+    /** Save, then close. A document without a file asks for a location first (`pickLocation`). */
+    fun saveThenClose(pickLocation: () -> Unit) {
+        _ui.update { it.copy(closePrompt = false) }
+        if (sourceUri != null) {
+            launchEngine {
+                val s = session ?: return@launchEngine
+                val uri = sourceUri ?: return@launchEngine
+                store.write(uri, s.save(sourceName))
+                withContext(Dispatchers.Main) { closeDocument(save = false) }
+            }
+        } else { closeAfterSave = true; pickLocation() }
+    }
+
+    fun closeDocument(save: Boolean = true) {
+        if (save) saveIfDirty()
+        autosaveJob?.cancel(); store.clearRecovery(); _recovery.value = null
+        unsavedRecovered = false; closeAfterSave = false
         session = null; sourceUri = null; pageCache.evictAll()
         _ui.value = EditorUiState()
     }
 
+    // ---- autosave / recovery ------------------------------------------------------------------
+
+    /** Debounced: a few seconds after the last edit the document is copied to private storage. */
+    private fun scheduleAutosave() {
+        autosaveJob?.cancel()
+        autosaveJob = viewModelScope.launch(engineThread) { delay(2500); autosaveNow() }
+    }
+
+    /** `export` leaves the document's saved/clean state alone, so this never hides a pending change. */
+    fun autosaveNow() {
+        val s = session ?: return
+        if (_ui.value.state?.dirty != true && !unsavedRecovered) return
+        runCatching {
+            store.writeRecovery(s.export(sourceName.substringBeforeLast('.', sourceName) + ".docx"), sourceName, sourceUri?.toString())
+            _recovery.value = store.recovery()
+        }
+    }
+
+    fun recoverDocument() = launchEngine {
+        val r = store.recovery() ?: return@launchEngine
+        val bytes = store.recoveryBytes() ?: return@launchEngine
+        WordcraftApp.fontsReady?.join()
+        val s = MobileSession.open(r.name.substringBeforeLast('.', r.name) + ".docx", bytes, null)
+        withContext(Dispatchers.Main) {
+            install(s, r.sourceUri?.let(Uri::parse), r.name)
+            unsavedRecovered = true
+            say("Recovered your unsaved work")
+        }
+    }
+
+    fun discardRecovery() { store.clearRecovery(); _recovery.value = null }
+
     private fun install(s: MobileSession, uri: Uri?, name: String) {
-        session = s; sourceUri = uri; sourceName = name; pageCache.evictAll()
+        session = s; sourceUri = uri; sourceName = name; pageCache.evictAll(); unsavedRecovered = false; closeAfterSave = false
         _ui.update { EditorUiState(open = true, tab = it.tab, ribbonExpanded = it.ribbonExpanded, zoom = 1f) }
         if (ribbon == null) ribbon = runCatching { RibbonModel.parse(s.commandsJson()) }.getOrNull()
         watched = ribbon?.watchedIds(_ui.value.tab).orEmpty()
@@ -131,6 +205,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         launchEngine {
             try {
                 store.write(uri, session!!.save(sourceName)); refresh()
+                markSaved()
                 store.remember(uri, sourceName, "Saved"); reloadRecents()
                 say("Saved")
             } catch (e: Exception) { say("Save failed: ${e.message}") }
@@ -150,10 +225,15 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             val s = session ?: return@launchEngine
             val bytes = if (copyOnly) s.export(name) else s.save(name)
             store.write(uri, bytes)
-            if (!copyOnly) sourceUri = uri.also { sourceName = name }
+            if (!copyOnly) { sourceUri = uri.also { sourceName = name }; markSaved() }
             store.remember(uri, name, if (copyOnly) "Exported" else "Saved"); reloadRecents()
             refresh(); say(if (copyOnly) "Exported $name" else "Saved $name")
         } catch (e: Exception) { say("Save failed: ${e.message}") }
+    }
+
+    private fun markSaved() {
+        unsavedRecovered = false; store.clearRecovery(); _recovery.value = null
+        if (closeAfterSave) { closeAfterSave = false; viewModelScope.launch(Dispatchers.Main) { closeDocument(save = false) } }
     }
 
     fun suggestedName(ext: String) = sourceName.substringBeforeLast('.') + "." + ext
@@ -203,11 +283,13 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun loadStyles() = launchEngine {
         val out = runCatching { session?.execute("styles.list", "") }.getOrNull() ?: return@launchEngine
-        val names = runCatching {
+        runCatching {
             val a = JSONArray(out)
-            (0 until a.length()).map { a.getJSONObject(it) }.filter { it.optBoolean("quick") }.map { it.getString("name") }
-        }.getOrDefault(emptyList())
-        _ui.update { it.copy(styles = names) }
+            val all = (0 until a.length()).map { a.getJSONObject(it) }
+            val quick = all.filter { it.optBoolean("quick") }.map { it.getString("name") }
+            val tables = all.filter { it.optString("kind").equals("table", ignoreCase = true) && !it.optBoolean("hidden") }.map { it.getString("name") }
+            _ui.update { it.copy(styles = quick, tableStyles = tables) }
+        }
     }
 
     fun typeText(text: String) {
@@ -237,6 +319,12 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- pointer input (page points) ---------------------------------------------------------
+
+    /** Commit a drag on the selection handles: size always, position too for floating objects. */
+    fun resizeObject(page: Int, x: Float, y: Float, w: Float, h: Float, move: Boolean) =
+        run("arrange.bounds", buildMap<String, Any> { put("width", w); put("height", h); if (move) { put("x", x); put("y", y); put("page", page) } })
+
+    fun moveObject(page: Int, x: Float, y: Float) = run("arrange.bounds", mapOf("x" to x, "y" to y, "page" to page))
 
     fun tap(page: Int, x: Float, y: Float) = launchEngine { session?.tap(page.toUInt(), x, y, false); refresh() }
     fun selectWord(page: Int, x: Float, y: Float) = launchEngine { session?.selectWordAt(page.toUInt(), x, y); refresh() }
@@ -272,7 +360,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun render(page: Int, scale: Float): Bitmap? = withContext(Dispatchers.Default) {
         val s = session ?: return@withContext null
         val rev = _ui.value.state?.revision ?: 0uL
-        val key = "$rev:$page:${(scale * 100).toInt()}"
+        val key = "$rev:${_ui.value.state?.showMarks}:$page:${(scale * 100).toInt()}"
         pageCache.get(key)?.let { return@withContext it }
         runCatching {
             val img = s.renderPage(page.toUInt(), scale)
@@ -301,7 +389,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private fun refresh() {
         val s = session ?: return
         val st = s.state()
+        if (st.dirty) scheduleAutosave()
         val en = if (watched.isEmpty()) emptySet() else s.enabledAmong(watched).toSet()
-        _ui.update { it.copy(pages = s.pages(), state = st, caret = s.caret(), selection = s.selectionRects(), ribbon = ribbon, enabled = en, watched = watched.toSet()) }
+        _ui.update { it.copy(pages = s.pages(), state = st, caret = s.caret(), selection = s.selectionRects(), obj = s.selectedObject(), ribbon = ribbon, enabled = en, watched = watched.toSet()) }
     }
 }

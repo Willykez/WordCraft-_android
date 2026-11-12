@@ -44,11 +44,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             val dark = isSystemInDarkTheme()
             val ctx = LocalContext.current
-            val scheme = when {
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-                dark -> darkColorScheme()
-                else -> lightColorScheme()
-            }
+            // One branded palette everywhere (wallpaper colours made dialogs and chips clash with the Word-blue UI).
+            val scheme = if (dark) darkColorScheme(primary = androidx.compose.ui.graphics.Color(0xFF8AB4F8))
+            else lightColorScheme(
+                primary = org.wordcraft.android.ui.WordBlue, onPrimary = androidx.compose.ui.graphics.Color.White,
+                secondaryContainer = androidx.compose.ui.graphics.Color(0xFFDCE6F7), onSecondaryContainer = org.wordcraft.android.ui.WordBlueDark,
+            )
             MaterialTheme(colorScheme = scheme) { Root() }
         }
     }
@@ -60,6 +61,7 @@ class MainActivity : ComponentActivity() {
 
     /** Leaving the app saves a document that came from a file, so typing is never lost. */
     override fun onStop() {
+        vm.autosaveNow()
         vm.saveIfDirty()
         super.onStop()
     }
@@ -103,16 +105,20 @@ class MainActivity : ComponentActivity() {
                 val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 cm.primaryClip?.getItemAt(0)?.coerceToText(this@MainActivity)?.toString()?.let(vm::paste)
             }
-            override fun close() = vm.closeDocument()
+            override fun close() = vm.requestClose()
         }
 
         if (ui.open) {
-            BackHandler { vm.closeDocument() }
+            BackHandler { vm.requestClose() }
             EditorScreen(vm, actions)
         } else {
             val recents by vm.recents.collectAsState()
+            val recovery by vm.recovery.collectAsState()
             HomeScreen(
                 recents = recents,
+                recovery = recovery,
+                onRecover = vm::recoverDocument,
+                onDiscardRecovery = vm::discardRecovery,
                 onNew = vm::newDocument,
                 onOpenFile = { openDoc.launch(arrayOf("*/*")) },
                 onOpenRecent = { r ->
@@ -124,6 +130,23 @@ class MainActivity : ComponentActivity() {
                 onPin = { vm.pinRecent(it.uri) },
                 onRemove = { vm.forgetRecent(it.uri) },
                 onClear = vm::clearRecents,
+            )
+        }
+
+        // Last launch ended in a crash: offer the report, which only leaves the device if the user shares it.
+        var crash by remember { mutableStateOf(java.io.File(filesDir, "crash.log").takeIf { it.exists() }?.readText()) }
+        crash?.let { report ->
+            AlertDialog(
+                onDismissRequest = { java.io.File(filesDir, "crash.log").delete(); crash = null },
+                title = { Text("WordCraft closed unexpectedly") },
+                text = { Text("Your work is safe: it is autosaved while you type. You can share the crash report to help get it fixed.") },
+                confirmButton = {
+                    TextButton({
+                        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, report), "Share crash report"))
+                        java.io.File(filesDir, "crash.log").delete(); crash = null
+                    }) { Text("Share report") }
+                },
+                dismissButton = { TextButton({ java.io.File(filesDir, "crash.log").delete(); crash = null }) { Text("Dismiss") } },
             )
         }
 

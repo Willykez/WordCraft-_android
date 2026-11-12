@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.wordcraft.android.data.RecentDoc
+import org.wordcraft.android.data.Recovery
 import java.util.Calendar
 
 private val PageBg = Color(0xFFF4F5F7)
@@ -65,6 +66,9 @@ private fun dayBucket(t: Long): String {
 @Composable
 fun HomeScreen(
     recents: List<RecentDoc>,
+    recovery: Recovery? = null,
+    onRecover: () -> Unit = {},
+    onDiscardRecovery: () -> Unit = {},
     onNew: (String) -> Unit,
     onOpenFile: () -> Unit,
     onOpenRecent: (RecentDoc) -> Unit,
@@ -124,6 +128,27 @@ fun HomeScreen(
                             focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
                         ),
                     )
+                }
+            }
+
+            recovery?.let { r ->
+                item {
+                    Card(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4E0)), shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text("Recover unsaved work", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "${r.name} · autosaved " + DateUtils.getRelativeTimeSpanString(r.savedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE),
+                                fontSize = 13.sp, color = Color.DarkGray,
+                            )
+                            Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onRecover, colors = ButtonDefaults.buttonColors(containerColor = WordBlue)) { Text("Recover") }
+                                TextButton(onDiscardRecovery) { Text("Discard") }
+                            }
+                        }
+                    }
                 }
             }
 

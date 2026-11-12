@@ -24,6 +24,8 @@ uniffi::setup_scaffolding!();
 /// Largest raster scale (pixels per point) a caller may ask for; keeps one page under ~100 MB.
 const MAX_SCALE: f32 = 6.0;
 const MIN_SCALE: f32 = 0.1;
+/// Byte length of the object placeholder character (U+FFFC) in the document text.
+const OBJ_LEN: usize = 3;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum BridgeError {
@@ -63,6 +65,20 @@ pub struct CaretRect {
     pub height: f32,
 }
 
+/// The picture or shape that is selected, on its page (points, unrotated frame).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct ObjRect {
+    pub page: u32,
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    /// A picture (as opposed to a shape or chart): crop, border and style apply.
+    pub picture: bool,
+    /// `inline`, `square`, `tight`, `through`, `topAndBottom`, `behindText` or `inFrontOfText`.
+    pub wrap: String,
+}
+
 #[derive(Clone, Copy, Debug, uniffi::Record)]
 pub struct SelRect {
     pub page: u32,
@@ -97,6 +113,10 @@ pub struct EditorState {
     pub in_table: bool,
     pub picture_selected: bool,
     pub word_count: u64,
+    /// Review › Track Changes is on.
+    pub track_changes: bool,
+    /// Show/Hide ¶ is on.
+    pub show_marks: bool,
     pub page_count: u32,
     /// Bumps on every document change: use it as the cache key for rendered pages.
     pub revision: u64,
@@ -247,6 +267,7 @@ impl MobileSession {
         let scale = if scale.is_finite() { scale.clamp(MIN_SCALE, MAX_SCALE) } else { 1.0 };
         let mut g = self.lock();
         let inner = &mut *g;
+        inner.opts.display.marks = inner.session.view.marks;
         let layout = inner.session.layout();
         let page = layout.pages.get(index as usize).ok_or_else(|| fail(format!("no page {index}")))?;
         let r = render_page(&inner.session.doc, page, scale, &inner.opts);
@@ -283,8 +304,45 @@ impl MobileSession {
     /// Put the caret where a tap at (`x`, `y`) points on `page`; with `extend` the selection grows
     /// from where it was instead.
     pub fn tap(&self, page: u32, x: f32, y: f32, extend: bool) -> Result<(), BridgeError> {
+        let mut g = self.lock();
+        let s = &mut g.session;
+        if !extend {
+            // A press on a picture or shape selects it (resize handles); text boxes keep their text.
+            let hit = s.layout().object_at(page as usize, x, y, 4.0).filter(|h| h.text_box.is_none() && h.member.is_none());
+            if let Some(h) = hit {
+                let pos = h.pos();
+                let mut focus = pos.clone();
+                focus.off += OBJ_LEN;
+                s.sel.anchor = pos;
+                s.sel.focus = focus;
+                s.page_hint = h.page;
+                return Ok(());
+            }
+        }
         let params = json!({ "page": page, "x": x, "y": y, "extend": extend });
-        self.lock().session.run("caret.set", &params).map(|_| ()).map_err(fail)
+        s.run("caret.set", &params).map(|_| ()).map_err(fail)
+    }
+
+    /// The picture or shape that is selected right now (exactly one object selected), if any.
+    pub fn selected_object(&self) -> Option<ObjRect> {
+        let mut g = self.lock();
+        let s = &mut g.session;
+        let (a, b) = s.sel.ordered();
+        if a.story != b.story || a.path != b.path || b.off != a.off + OBJ_LEN {
+            return None;
+        }
+        let hint = s.page_hint;
+        let hit = s.layout().object(&a, hint)?;
+        let wrap = serde_json::to_value(&hit.wrap).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
+        Some(ObjRect {
+            page: u32::try_from(hit.page).ok()?,
+            x: hit.rect.x,
+            y: hit.rect.y,
+            w: hit.rect.w,
+            h: hit.rect.h,
+            picture: s.why_disabled("picture.reset").is_none(),
+            wrap,
+        })
     }
 
     /// Tap, then select the word under it (double tap).
@@ -356,6 +414,8 @@ impl MobileSession {
             in_table: enabled(s, "table.deleteRow"),
             picture_selected: enabled(s, "picture.size"),
             word_count: s.word_count() as u64,
+            track_changes: s.doc.settings.track_changes,
+            show_marks: s.view.marks,
             page_count,
             revision: s.rev(),
             file_name: s.file_name.clone().unwrap_or_else(|| "Untitled".into()),

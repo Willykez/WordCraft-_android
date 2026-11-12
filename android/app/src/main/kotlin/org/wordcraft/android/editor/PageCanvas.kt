@@ -7,6 +7,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -39,6 +40,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -71,16 +74,12 @@ fun PageCanvas(
     onZoom: (Float) -> Unit,
     onTapped: () -> Unit,
     modifier: Modifier = Modifier,
+    marks: Boolean = false,
+    obj: org.wordcraft.bridge.ObjRect? = null,
 ) {
     val list = rememberLazyListState()
     val currentZoom by rememberUpdatedState(zoom)
     val currentOnZoom by rememberUpdatedState(onZoom)
-
-    // Scroll the caret's page into view when typing moves it off screen.
-    LaunchedEffect(caret?.page) {
-        val p = caret?.page?.toInt() ?: return@LaunchedEffect
-        if (list.layoutInfo.visibleItemsInfo.none { it.index == p }) list.animateScrollToItem(p)
-    }
 
     BoxWithConstraints(
         modifier
@@ -111,6 +110,26 @@ fun PageCanvas(
         val dpPerPt = (maxWidth.value - 16f) / maxWidthPt * zoom
         val horizontal = rememberScrollState()
 
+        // Keep the caret on screen as it moves: typing at the bottom, Enter, arrow keys, Find.
+        val pxPerPtNow = with(LocalDensity.current) { dpPerPt.dp.toPx() }
+        val edge = with(LocalDensity.current) { 72.dp.toPx() } // clear of the mini toolbar and keyboard edge
+        LaunchedEffect(caret?.page, caret?.y, caret?.height) {
+            val c = caret ?: return@LaunchedEffect
+            val p = c.page.toInt()
+            if (list.layoutInfo.visibleItemsInfo.none { it.index == p }) list.scrollToItem(p)
+            val item = list.layoutInfo.visibleItemsInfo.firstOrNull { it.index == p } ?: return@LaunchedEffect
+            val top = item.offset + c.y.toFloat() * pxPerPtNow
+            val bottom = top + c.height.toFloat() * pxPerPtNow
+            val viewStart = list.layoutInfo.viewportStartOffset + edge
+            val viewEnd = list.layoutInfo.viewportEndOffset - edge
+            val delta = when {
+                top < viewStart -> top - viewStart
+                bottom > viewEnd -> bottom - viewEnd
+                else -> 0f
+            }
+            if (delta != 0f) list.animateScrollBy(delta)
+        }
+
         LazyColumn(
             state = list,
             modifier = Modifier.fillMaxSize().then(if (zoom > 1.02f) Modifier.horizontalScroll(horizontal) else Modifier),
@@ -120,7 +139,7 @@ fun PageCanvas(
         ) {
             itemsIndexed(pages, key = { i, _ -> i }) { index, page ->
                 PageItem(
-                    vm = vm, index = index, page = page, dpPerPt = dpPerPt, revision = revision,
+                    vm = vm, index = index, page = page, dpPerPt = dpPerPt, revision = revision, marks = marks, obj = obj?.takeIf { it.page.toInt() == index },
                     caret = caret?.takeIf { it.page.toInt() == index },
                     selection = selection.filter { it.page.toInt() == index },
                     allSelection = selection,
@@ -138,6 +157,8 @@ private fun PageItem(
     page: PageInfo,
     dpPerPt: Float,
     revision: ULong,
+    marks: Boolean,
+    obj: org.wordcraft.bridge.ObjRect?,
     caret: CaretRect?,
     selection: List<SelRect>,
     allSelection: List<SelRect>,
@@ -155,10 +176,11 @@ private fun PageItem(
     var bitmap by remember(index) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     
     // Keep showing the previous bitmap until the new one is ready, so typing doesn't flicker.
-    LaunchedEffect(revision, index, (rasterScale * 20).roundToInt()) {
+    LaunchedEffect(revision, marks, index, (rasterScale * 20).roundToInt()) {
         vm.render(index, rasterScale)?.let { bitmap = it.asImageBitmap() }
     }
 
+    var lastDouble by remember { mutableLongStateOf(0L) }
     val blink = rememberInfiniteTransition(label = "caret").animateFloat(
         initialValue = 1f, targetValue = 0f,
         animationSpec = infiniteRepeatable(tween(530), RepeatMode.Reverse), label = "caretAlpha",
@@ -167,11 +189,17 @@ private fun PageItem(
     Box(
         Modifier
             .size(widthDp, heightDp)
+            .shadow(4.dp, RectangleShape)
             .background(Color.White)
             .pointerInput(index, pxPerPt) {
                 detectTapGestures(
-                    onTap = { o -> vm.tap(index, o.x / pxPerPt, o.y / pxPerPt); onTapped() },
-                    onDoubleTap = { o -> vm.selectWord(index, o.x / pxPerPt, o.y / pxPerPt); onTapped() },
+                    // A third quick tap right after a double tap selects the whole paragraph.
+                    onTap = { o ->
+                        if (System.currentTimeMillis() - lastDouble < 900) vm.selectParagraph(index, o.x / pxPerPt, o.y / pxPerPt)
+                        else vm.tap(index, o.x / pxPerPt, o.y / pxPerPt)
+                        onTapped()
+                    },
+                    onDoubleTap = { o -> lastDouble = System.currentTimeMillis(); vm.selectWord(index, o.x / pxPerPt, o.y / pxPerPt); onTapped() },
                 )
             }
             // Long-press selects a word, then dragging extends the selection from it.
@@ -203,7 +231,9 @@ private fun PageItem(
                 )
             }
         }
-        if (allSelection.isNotEmpty()) SelectionHandles(vm, index, pxPerPt, allSelection)
+        if (obj != null) {
+            ObjectHandles(obj, pxPerPt) { x, y, w, h, moved -> vm.resizeObject(index, x, y, w, h, moved) }
+        } else if (allSelection.isNotEmpty()) SelectionHandles(vm, index, pxPerPt, allSelection)
     }
 }
 

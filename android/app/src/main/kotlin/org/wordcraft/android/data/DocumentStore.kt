@@ -12,6 +12,9 @@ data class RecentDoc(val uri: String, val name: String, val openedAt: Long, val 
     val editable: Boolean get() = extension in setOf("docx", "docm", "dotx", "odt", "rtf", "txt", "doc", "html", "htm", "md", "")
 }
 
+/** The last unsaved state of the open document, kept in app-private storage so a crash or kill never loses typing. */
+data class Recovery(val name: String, val sourceUri: String?, val savedAt: Long)
+
 /** Storage Access Framework I/O plus a small recent-documents list. */
 class DocumentStore(private val ctx: Context) {
     private val prefs = ctx.getSharedPreferences("recent", Context.MODE_PRIVATE)
@@ -52,4 +55,29 @@ class DocumentStore(private val ctx: Context) {
     fun togglePin(uri: String) = save(recents().map { if (it.uri == uri) it.copy(pinned = !it.pinned) else it })
     fun forget(uri: String) = save(recents().filter { it.uri != uri })
     fun clear() = save(recents().filter { it.pinned })
+
+    // ---- recovery copy (never leaves the device) ------------------------------------------------
+
+    private val recoveryFile get() = java.io.File(ctx.filesDir, "recovery/autosave.bin")
+
+    fun writeRecovery(bytes: ByteArray, name: String, sourceUri: String?) {
+        val f = recoveryFile
+        f.parentFile?.mkdirs()
+        val tmp = java.io.File(f.parentFile, "autosave.tmp")
+        tmp.writeBytes(bytes)
+        tmp.renameTo(f) // replace atomically: a crash mid-write keeps the previous copy
+        prefs.edit().putString("rec_name", name).putString("rec_src", sourceUri).putLong("rec_time", System.currentTimeMillis()).apply()
+    }
+
+    fun recovery(): Recovery? {
+        if (!recoveryFile.exists()) return null
+        return Recovery(prefs.getString("rec_name", null) ?: "Untitled.docx", prefs.getString("rec_src", null), prefs.getLong("rec_time", recoveryFile.lastModified()))
+    }
+
+    fun recoveryBytes(): ByteArray? = runCatching { recoveryFile.readBytes() }.getOrNull()
+
+    fun clearRecovery() {
+        recoveryFile.delete()
+        prefs.edit().remove("rec_name").remove("rec_src").remove("rec_time").apply()
+    }
 }
