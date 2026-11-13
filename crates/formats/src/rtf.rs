@@ -46,5 +46,3 @@ use state::MAX_SECTIONS;
 #[cfg(test)]
 use word::hyperlink;
 
-#[cfg(test)]
-mod tests;

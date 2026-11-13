@@ -77,6 +77,8 @@ fun PageCanvas(
     modifier: Modifier = Modifier,
     marks: Boolean = false,
     obj: org.wordcraft.bridge.ObjRect? = null,
+    tableGeo: org.wordcraft.bridge.TableGeo? = null,
+    ruler: org.wordcraft.bridge.RulerInfo? = null,
 ) {
     val list = rememberLazyListState()
     val currentZoom by rememberUpdatedState(zoom)
@@ -134,19 +136,33 @@ fun PageCanvas(
         LazyColumn(
             state = list,
             modifier = Modifier.fillMaxSize().then(if (zoom > 1.02f) Modifier.horizontalScroll(horizontal) else Modifier),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(top = if (ruler != null) 36.dp else 12.dp, bottom = 8.dp),
             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             itemsIndexed(pages, key = { i, _ -> i }) { index, page ->
                 PageItem(
-                    vm = vm, index = index, page = page, dpPerPt = dpPerPt, revision = revision, marks = marks, obj = obj?.takeIf { it.page.toInt() == index },
+                    vm = vm, index = index, page = page, dpPerPt = dpPerPt, revision = revision, marks = marks, obj = obj?.takeIf { it.page.toInt() == index }, tableGeo = tableGeo?.takeIf { it.page.toInt() == index },
                     caret = caret?.takeIf { it.page.toInt() == index },
                     selection = selection.filter { it.page.toInt() == index },
                     allSelection = selection,
                     onTapped = onTapped,
                 )
             }
+        }
+
+        // The ruler follows the caret's page: its left edge tracks the page as it is centred or scrolled sideways.
+        if (ruler != null) {
+            val pageW = (pages.getOrNull(ruler.page.toInt())?.widthPt?.toFloat() ?: ruler.pageW) * pxPerPtNow
+            val wide = zoom > 1.02f
+            val columnW = if (wide) maxWidthPt * pxPerPtNow else constraints.maxWidth.toFloat()
+            val pageLeft = (columnW - pageW) / 2f - (if (wide) horizontal.value.toFloat() else 0f)
+            RulerBar(
+                ruler, pageLeft, pxPerPtNow,
+                onIndents = { l, r, f -> vm.setIndents(l, r, f) },
+                onTab = { clear, pos, kind -> vm.setTabStop(clear, pos, kind) },
+                modifier = Modifier.align(Alignment.TopStart),
+            )
         }
     }
 }
@@ -160,6 +176,7 @@ private fun PageItem(
     revision: ULong,
     marks: Boolean,
     obj: org.wordcraft.bridge.ObjRect?,
+    tableGeo: org.wordcraft.bridge.TableGeo?,
     caret: CaretRect?,
     selection: List<SelRect>,
     allSelection: List<SelRect>,
@@ -232,6 +249,7 @@ private fun PageItem(
                 )
             }
         }
+        if (tableGeo != null && obj == null) TableHandles(tableGeo, pxPerPt) { x, y, tx, ty -> vm.dragTableBorder(index, x, y, tx, ty) }
         if (obj != null) {
             ObjectHandles(obj, pxPerPt) { x, y, w, h, moved -> vm.resizeObject(index, x, y, w, h, moved) }
         } else if (allSelection.isNotEmpty()) SelectionHandles(vm, index, pxPerPt, allSelection)

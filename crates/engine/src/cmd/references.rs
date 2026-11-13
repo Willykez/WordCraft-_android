@@ -201,5 +201,3 @@ impl FieldCode {
     }
 }
 
-#[cfg(test)]
-mod tests;

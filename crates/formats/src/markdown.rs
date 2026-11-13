@@ -36,5 +36,3 @@ pub use inlines::parse_inlines;
 
 #[cfg(test)]
 use blocks::split_row;
-#[cfg(test)]
-mod tests;

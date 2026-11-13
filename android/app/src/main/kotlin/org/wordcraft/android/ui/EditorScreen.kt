@@ -44,7 +44,7 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 PageCanvas(
                     vm = vm, pages = ui.pages, caret = ui.caret, selection = ui.selection,
-                    revision = st?.revision ?: 0uL, zoom = ui.zoom, onZoom = vm::setZoom, marks = st?.showMarks == true, obj = ui.obj,
+                    revision = st?.revision ?: 0uL, zoom = ui.zoom, onZoom = vm::setZoom, marks = st?.showMarks == true, obj = ui.obj, tableGeo = ui.tableGeo, ruler = ui.ruler,
                     onTapped = { runCatching { focus.requestFocus() }; keyboard?.show(); keyboardShown = true },
                 )
                 TypingSink(vm, focus) { s ->
@@ -60,6 +60,7 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
                 ) {
                     if (ui.obj != null) ObjectBar(ui, d, vm)
                     else {
+                        ProofBar(ui, vm)
                         if (st?.hasSelection == true) MiniToolbar(ui, d)
                         if (st?.inTable == true) TableBar(ui, d)
                     }

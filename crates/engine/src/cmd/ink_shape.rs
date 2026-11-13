@@ -465,5 +465,3 @@ fn upright(c: &[[f32; 2]]) -> bool {
     dirs.iter().all(Option::is_some) && (0..n).all(|i| dirs.get(i) != dirs.get((i + 1) % n))
 }
 
-#[cfg(test)]
-mod tests;

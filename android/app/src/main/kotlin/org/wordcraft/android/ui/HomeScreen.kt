@@ -2,6 +2,8 @@ package org.wordcraft.android.ui
 
 import android.text.format.DateUtils
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -75,6 +77,7 @@ fun HomeScreen(
     onPin: (RecentDoc) -> Unit = {},
     onRemove: (RecentDoc) -> Unit = {},
     onClear: () -> Unit = {},
+    thumbFor: (String) -> android.graphics.Bitmap? = { null },
 ) {
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("All") }
@@ -176,11 +179,11 @@ fun HomeScreen(
             if (shown.isEmpty()) item { EmptyState(recents.isEmpty(), onOpenFile) }
             if (pinned.isNotEmpty()) {
                 item { GroupTitle("Pinned") }
-                pinned.forEach { r -> item(key = "p" + r.uri) { RecentRow(r, onOpenRecent, onPin, onRemove) } }
+                pinned.forEach { r -> item(key = "p" + r.uri) { RecentRow(r, thumbFor, onOpenRecent, onPin, onRemove) } }
             }
             grouped.forEach { (day, docs) ->
                 item(key = "h$day") { GroupTitle(day) }
-                docs.forEach { r -> item(key = r.uri) { RecentRow(r, onOpenRecent, onPin, onRemove) } }
+                docs.forEach { r -> item(key = r.uri) { RecentRow(r, thumbFor, onOpenRecent, onPin, onRemove) } }
             }
         }
     }
@@ -285,7 +288,7 @@ private fun TypeTile(doc: RecentDoc) {
 }
 
 @Composable
-private fun RecentRow(r: RecentDoc, onOpen: (RecentDoc) -> Unit, onPin: (RecentDoc) -> Unit, onRemove: (RecentDoc) -> Unit) {
+private fun RecentRow(r: RecentDoc, thumbFor: (String) -> android.graphics.Bitmap?, onOpen: (RecentDoc) -> Unit, onPin: (RecentDoc) -> Unit, onRemove: (RecentDoc) -> Unit) {
     var menu by remember { mutableStateOf(false) }
     val whenText = DateUtils.getRelativeTimeSpanString(r.openedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE).toString()
     Card(
@@ -294,7 +297,14 @@ private fun RecentRow(r: RecentDoc, onOpen: (RecentDoc) -> Unit, onPin: (RecentD
         shape = RoundedCornerShape(12.dp),
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            TypeTile(r)
+            val thumb = remember(r.uri, r.openedAt) { thumbFor(r.uri)?.asImageBitmap() }
+            if (thumb != null) {
+                Image(
+                    thumb, "Preview of ${r.name}",
+                    Modifier.height(64.dp).aspectRatio(thumb.width.toFloat() / thumb.height).clip(RoundedCornerShape(4.dp)).border(1.dp, Color(0xFFD6D9DF), RoundedCornerShape(4.dp)),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                )
+            } else TypeTile(r)
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(r.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically) {

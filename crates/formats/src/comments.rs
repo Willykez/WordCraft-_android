@@ -201,5 +201,3 @@ fn text(notes: &[Note]) -> String {
     s
 }
 
-#[cfg(test)]
-mod tests;

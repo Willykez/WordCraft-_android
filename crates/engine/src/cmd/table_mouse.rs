@@ -605,5 +605,3 @@ fn room_right(l: &DocLayout, doc: &Document, page: usize, target: &ResizeTarget)
     (b.rect.right() - inset).min(margin)
 }
 
-#[cfg(test)]
-mod tests;

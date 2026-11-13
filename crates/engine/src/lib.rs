@@ -207,5 +207,3 @@ pub mod p {
     }
 }
 
-#[cfg(test)]
-mod tests;

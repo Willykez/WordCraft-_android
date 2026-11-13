@@ -60,7 +60,7 @@ fun TitleBar(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, actions: Edi
 
 val PANELS = listOf(
     "find" to "Find & Replace", "nav" to "Navigation", "styles" to "Styles", "format" to "Font",
-    "comments" to "Comments", "clipboard" to "Clipboard", "info" to "Document info", "zoom" to "Zoom", "search" to "Tell me",
+    "review" to "Review", "comments" to "Comments", "clipboard" to "Clipboard", "info" to "Document info", "zoom" to "Zoom", "search" to "Tell me",
 )
 
 /** File + ribbon tabs; contextual tabs (table, picture, …) join in orange while they apply. */

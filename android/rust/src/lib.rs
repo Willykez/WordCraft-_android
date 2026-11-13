@@ -79,6 +79,43 @@ pub struct ObjRect {
     pub wrap: String,
 }
 
+/// Grid of the table under the caret, in page points (for column/row drag handles).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct TableGeo {
+    pub page: u32,
+    /// Page x of every vertical grid line, left to right (columns + 1 of them).
+    pub cols: Vec<f32>,
+    /// Page y of every row's bottom border, top to bottom (on this page).
+    pub row_bottoms: Vec<f32>,
+    pub top: f32,
+    pub bottom: f32,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct RulerTab {
+    /// Points from the text column's left edge.
+    pub pos: f32,
+    /// `left`, `center`, `right`, `decimal` or `bar`.
+    pub kind: String,
+}
+
+/// What the horizontal ruler shows for the caret's paragraph (points; page x unless noted).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct RulerInfo {
+    pub page: u32,
+    pub page_w: f32,
+    /// The text column: left edge and width.
+    pub body_x: f32,
+    pub body_w: f32,
+    /// Left indent, from the column's left edge.
+    pub left: f32,
+    /// First-line indent relative to the left indent (negative = hanging).
+    pub first_line: f32,
+    /// Right indent, from the column's right edge.
+    pub right: f32,
+    pub tabs: Vec<RulerTab>,
+}
+
 #[derive(Clone, Copy, Debug, uniffi::Record)]
 pub struct SelRect {
     pub page: u32,
@@ -321,6 +358,54 @@ impl MobileSession {
         }
         let params = json!({ "page": page, "x": x, "y": y, "extend": extend });
         s.run("caret.set", &params).map(|_| ()).map_err(fail)
+    }
+
+    /// The table under the caret: its grid lines on the caret's page, so the UI can offer drag handles.
+    pub fn table_geometry(&self) -> Option<TableGeo> {
+        let c = self.caret()?;
+        let mut g = self.lock();
+        let s = &mut g.session;
+        let l = s.layout();
+        let t = wordcraft_engine::cmd::table_resize::table_under(&l, &s.doc, c.page as usize, c.x, c.y + c.height / 2.0, 0.0)?;
+        Some(TableGeo {
+            page: c.page,
+            cols: t.cols.clone(),
+            row_bottoms: t.rows.iter().map(|r| r.bottom).collect(),
+            top: t.top(),
+            bottom: t.bottom(),
+        })
+    }
+
+    /// Indents, tab stops and the text column for the ruler.
+    pub fn ruler_info(&self) -> Option<RulerInfo> {
+        let mut g = self.lock();
+        let s = &mut g.session;
+        let hint = s.page_hint;
+        let (pi, pw, bx, bw) = {
+            let l = s.layout();
+            let pi = hint.min(l.pages.len().checked_sub(1)?);
+            let p = l.pages.get(pi)?;
+            (pi, p.w, p.body.x, p.body.w)
+        };
+        let rp = s.doc.para_at(&s.sel.focus).map(|para| s.doc.styles.resolve_para(&para.props))?;
+        let tabs = rp
+            .tabs
+            .iter()
+            .filter_map(|t| {
+                let kind = format!("{:?}", t.align).to_lowercase();
+                (kind != "clear").then(|| RulerTab { pos: t.pos, kind })
+            })
+            .collect();
+        Some(RulerInfo {
+            page: u32::try_from(pi).ok()?,
+            page_w: pw,
+            body_x: bx,
+            body_w: bw,
+            left: rp.indent_left,
+            first_line: rp.indent_first,
+            right: rp.indent_right,
+            tabs,
+        })
     }
 
     /// The picture or shape that is selected right now (exactly one object selected), if any.

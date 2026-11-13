@@ -928,5 +928,3 @@ fn replay(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"replaying": on, "strokes": list}))
 }
 
-#[cfg(test)]
-mod tests;

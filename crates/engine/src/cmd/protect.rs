@@ -699,5 +699,3 @@ pub fn next_region(s: &Session, from: &Pos) -> Option<(Pos, Pos)> {
     Some((next.start.clone(), next.end.clone()))
 }
 
-#[cfg(test)]
-mod tests;

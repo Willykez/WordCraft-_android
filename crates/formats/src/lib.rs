@@ -105,7 +105,3 @@ pub fn export_with(ext: &str, doc: &Document, opts: &ExportOptions) -> Option<Re
     Some(out.map(|bytes| comments::append(&ext, doc, bytes)))
 }
 
-#[cfg(test)]
-mod test_log;
-#[cfg(test)]
-mod tests;

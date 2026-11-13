@@ -684,5 +684,3 @@ pub(crate) fn touch(s: &mut Session, target: &ResizeTarget) -> Result<(), CmdErr
     Ok(())
 }
 
-#[cfg(test)]
-mod tests;

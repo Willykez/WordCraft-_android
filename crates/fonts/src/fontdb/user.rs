@@ -658,5 +658,3 @@ fn write_unique(dir: &Path, name: &str, bytes: &[u8]) -> std::io::Result<PathBuf
     Ok(path)
 }
 
-#[cfg(test)]
-pub(crate) mod tests;

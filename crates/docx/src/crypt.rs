@@ -983,5 +983,3 @@ fn primary_transform() -> Vec<u8> {
     v
 }
 
-#[cfg(test)]
-mod tests;

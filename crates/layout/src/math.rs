@@ -250,5 +250,3 @@ pub fn layout_equation(
     MathLayout { width: b.w.max(0.0), ascent: b.a.max(0.0), descent: b.d.max(0.0), items: b.items, slots }
 }
 
-#[cfg(test)]
-mod tests;

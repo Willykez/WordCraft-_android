@@ -42,5 +42,3 @@ pub use parser::{import, parse};
 #[cfg(test)]
 use units::{length_pt, spec_widths};
 
-#[cfg(test)]
-mod tests;

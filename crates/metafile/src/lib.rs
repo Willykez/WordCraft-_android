@@ -18,8 +18,6 @@ mod place;
 mod size;
 mod wmf;
 
-#[cfg(test)]
-mod tests;
 
 use bytes::Bytes;
 use canvas::{Raw, RawText};

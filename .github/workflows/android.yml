@@ -3,9 +3,9 @@ name: Android
 on:
   push:
     branches: [main]
-    paths: ["android/**", "crates/**", "Cargo.toml", "Cargo.lock", ".github/workflows/android.yml"]
+    paths: ["android/**", "crates/**", "assets/**", "Cargo.toml", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["android/**", "crates/**", "Cargo.toml", "Cargo.lock", ".github/workflows/android.yml"]
+    paths: ["android/**", "crates/**", "assets/**", "Cargo.toml", ".github/workflows/android.yml"]
   workflow_dispatch:
 
 permissions:
@@ -44,9 +44,7 @@ jobs:
       # 2. Fixed cache configuration to include the root workspace crates
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            .
-            android/rust
+          workspaces: android/rust
 
       - name: Install Android NDK
         run: |

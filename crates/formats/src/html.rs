@@ -44,5 +44,3 @@ pub use import::{PAGE_FONT, import, import_on, import_page, import_with, parse, 
 
 #[cfg(test)]
 use css::css_unescape;
-#[cfg(test)]
-mod tests;

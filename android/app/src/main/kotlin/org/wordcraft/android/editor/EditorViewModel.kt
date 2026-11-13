@@ -24,6 +24,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import org.wordcraft.android.ui.Cmd
 import org.wordcraft.bridge.ObjRect
+import org.wordcraft.bridge.RulerInfo
+import org.wordcraft.bridge.TableGeo
 import org.wordcraft.android.ui.RibbonModel
 import org.wordcraft.bridge.CaretRect
 import org.wordcraft.bridge.EditorState
@@ -66,6 +68,13 @@ data class EditorUiState(
     val closePrompt: Boolean = false,
     /** The selected picture or shape, for resize handles and the picture toolbar. */
     val obj: ObjRect? = null,
+    /** A misspelling or grammar issue under the caret, with suggested fixes. */
+    val issue: JSONObject? = null,
+    /** Grid of the table under the caret, for the column/row drag handles. */
+    val tableGeo: TableGeo? = null,
+    /** Indents and tab stops of the caret's paragraph. */
+    val ruler: RulerInfo? = null,
+    val showRuler: Boolean = true,
 ) {
     fun isEnabled(id: String) = id !in watched || id in enabled
 }
@@ -192,11 +201,12 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun install(s: MobileSession, uri: Uri?, name: String) {
         session = s; sourceUri = uri; sourceName = name; pageCache.evictAll(); unsavedRecovered = false; closeAfterSave = false
-        _ui.update { EditorUiState(open = true, tab = it.tab, ribbonExpanded = it.ribbonExpanded, zoom = 1f) }
+        _ui.update { EditorUiState(open = true, tab = it.tab, ribbonExpanded = it.ribbonExpanded, showRuler = it.showRuler, zoom = 1f) }
         if (ribbon == null) ribbon = runCatching { RibbonModel.parse(s.commandsJson()) }.getOrNull()
         watched = ribbon?.watchedIds(_ui.value.tab).orEmpty()
         refresh()
         loadStyles()
+        launchEngine { saveThumbnail() }
     }
 
     /** Save in place when the file came from a writable URI; otherwise the UI asks for a location. */
@@ -216,7 +226,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun saveIfDirty() {
         val s = session ?: return
         val uri = sourceUri ?: return
-        runCatching { if (s.state().dirty) store.write(uri, s.save(sourceName)) }
+        runCatching { if (s.state().dirty) { store.write(uri, s.save(sourceName)); saveThumbnail() } }
     }
 
     fun saveAs(uri: Uri, asFormat: String? = null, copyOnly: Boolean = false) = launchEngine {
@@ -231,7 +241,22 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) { say("Save failed: ${e.message}") }
     }
 
+    /** A small picture of page 1 for the home screen's recent list. */
+    private fun saveThumbnail() {
+        val s = session ?: return
+        val key = sourceUri?.toString() ?: return
+        runCatching {
+            val img = s.renderPage(0u, 0.3f)
+            val bmp = Bitmap.createBitmap(img.width.toInt(), img.height.toInt(), Bitmap.Config.ARGB_8888)
+            bmp.copyPixelsFromBuffer(ByteBuffer.wrap(img.rgba))
+            store.writeThumbnail(key, bmp)
+        }
+    }
+
+    fun thumbnail(uri: String): Bitmap? = store.thumbnail(uri)
+
     private fun markSaved() {
+        saveThumbnail()
         unsavedRecovered = false; store.clearRecovery(); _recovery.value = null
         if (closeAfterSave) { closeAfterSave = false; viewModelScope.launch(Dispatchers.Main) { closeDocument(save = false) } }
     }
@@ -293,6 +318,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun typeText(text: String) {
+        if (_ui.value.issue != null) dismissIssue()
         // Split on line breaks: each one is a real paragraph break (Enter), the rest is plain typing.
         text.split('\n').forEachIndexed { i, part ->
             if (i > 0) run("text.newParagraph")
@@ -324,9 +350,39 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun resizeObject(page: Int, x: Float, y: Float, w: Float, h: Float, move: Boolean) =
         run("arrange.bounds", buildMap<String, Any> { put("width", w); put("height", h); if (move) { put("x", x); put("y", y); put("page", page) } })
 
+    /** Ruler drags: any of the three indents (points), or a tab stop moved / added / cleared. */
+    fun setIndents(left: Float?, right: Float?, first: Float?) =
+        run("para.indents", buildMap<String, Any> { left?.let { put("left", it) }; right?.let { put("right", it) }; first?.let { put("firstLine", it) } })
+
+    fun setTabStop(clear: Float?, pos: Float?, kind: String) = run("para.tabs", buildMap<String, Any> {
+        clear?.let { put("clear", listOf(it)) }
+        pos?.let { put("set", listOf(mapOf("pos" to it, "align" to kind))) }
+    })
+
+    /** One finished drag of a table border (page points): a column or row border, or the corner handle. */
+    fun dragTableBorder(page: Int, x: Float, y: Float, toX: Float, toY: Float) =
+        run("table.resizeDrag", mapOf("page" to page, "x" to x, "y" to y, "toX" to toX, "toY" to toY))
+
     fun moveObject(page: Int, x: Float, y: Float) = run("arrange.bounds", mapOf("x" to x, "y" to y, "page" to page))
 
-    fun tap(page: Int, x: Float, y: Float) = launchEngine { session?.tap(page.toUInt(), x, y, false); refresh() }
+    fun tap(page: Int, x: Float, y: Float) = launchEngine {
+        val s = session ?: return@launchEngine
+        s.tap(page.toUInt(), x, y, false)
+        refresh()
+        // Tapping a squiggled word offers its fixes; pictures and plain text don't.
+        val issue = if (s.selectedObject() == null) runCatching { JSONObject(s.execute("review.suggestions", "")) }.getOrNull() else null
+        if (issue != null) { runCatching { s.execute("select.word", "") }; refresh() }
+        _ui.update { it.copy(issue = issue) }
+    }
+
+    fun dismissIssue() = _ui.update { it.copy(issue = null) }
+
+    /** Replace the selected issue with a suggestion, or ignore / learn the word. */
+    fun fixIssue(command: String, params: Map<String, Any?> = emptyMap()) {
+        dismissIssue()
+        run(command, params)
+    }
+
     fun selectWord(page: Int, x: Float, y: Float) = launchEngine { session?.selectWordAt(page.toUInt(), x, y); refresh() }
     fun selectParagraph(page: Int, x: Float, y: Float) = launchEngine { session?.selectParagraphAt(page.toUInt(), x, y); refresh() }
     fun selectBetween(ap: Int, ax: Float, ay: Float, bp: Int, bx: Float, by: Float) = launchEngine {
@@ -342,6 +398,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         watched = ribbon?.watchedIds(t).orEmpty()
         launchEngine { refresh() }
     }
+    fun toggleRuler() { _ui.update { it.copy(showRuler = !it.showRuler) }; launchEngine { refresh() } }
     fun toggleRibbon() = _ui.update { it.copy(ribbonExpanded = !it.ribbonExpanded) }
     fun setZoom(z: Float) = _ui.update { it.copy(zoom = z.coerceIn(0.5f, 4f)) }
     fun openPanel(id: String) = _ui.update { it.copy(panels = it.panels.filter { p -> p != id } + id) }
@@ -391,6 +448,6 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val st = s.state()
         if (st.dirty) scheduleAutosave()
         val en = if (watched.isEmpty()) emptySet() else s.enabledAmong(watched).toSet()
-        _ui.update { it.copy(pages = s.pages(), state = st, caret = s.caret(), selection = s.selectionRects(), obj = s.selectedObject(), ribbon = ribbon, enabled = en, watched = watched.toSet()) }
+        _ui.update { it.copy(pages = s.pages(), state = st, caret = s.caret(), selection = s.selectionRects(), obj = s.selectedObject(), tableGeo = if (st.inTable) s.tableGeometry() else null, ruler = if (it.showRuler) s.rulerInfo() else null, ribbon = ribbon, enabled = en, watched = watched.toSet()) }
     }
 }

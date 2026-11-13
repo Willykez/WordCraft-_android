@@ -1,10 +1,4 @@
 *~
-plan/
-/target
-/dist
-/corpus
-/log
 .DS_Store
-/.claude/
-/target-*/
-/craft-fonts/
+/target
+/android/rust/target

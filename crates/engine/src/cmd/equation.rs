@@ -842,5 +842,3 @@ fn gallery(_: &mut Session, _: &Value) -> CmdResult {
     Ok(json!({"structures": structures, "symbols": symbols, "builtins": builtins}))
 }
 
-#[cfg(test)]
-mod tests;

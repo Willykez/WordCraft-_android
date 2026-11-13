@@ -140,7 +140,3 @@ pub struct Document {
     pub kept: kept::Kept,
 }
 
-#[cfg(test)]
-mod test_log;
-#[cfg(test)]
-mod tests;

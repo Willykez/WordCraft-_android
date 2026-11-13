@@ -41,6 +41,7 @@ class Dispatcher(private val vm: EditorViewModel, private val actions: EditorAct
             "view.zoomOut" -> vm.setZoom(vm.ui.value.zoom / 1.15f)
             "view.zoom100", "view.pageWidth", "view.onePage", "view.multiplePages" -> vm.setZoom(1f)
             "view.zoom" -> vm.openPanel("zoom")
+            "view.ruler" -> vm.toggleRuler()
             "view.navigationPane" -> vm.togglePanel("nav")
             "edit.find", "edit.advancedFind", "edit.replace" -> vm.openPanel("find")
             "view.stylesPane", "styles.pane", "styles.inspector" -> vm.togglePanel("styles")
@@ -48,6 +49,7 @@ class Dispatcher(private val vm: EditorViewModel, private val actions: EditorAct
             "edit.clipboardPane" -> vm.togglePanel("clipboard")
             "file.info", "file.properties" -> vm.openPanel("info")
             "format.fontDialog" -> vm.openPanel("format")
+            "review.changes", "review.issues" -> vm.openPanel("review")
             "tools.search" -> vm.openPanel("search")
             else -> return false
         }

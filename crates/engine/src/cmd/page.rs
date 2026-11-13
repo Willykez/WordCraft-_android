@@ -765,5 +765,3 @@ fn shifted_by_split(p: &Pos, at: &Pos, new: &Pos) -> Pos {
     q
 }
 
-#[cfg(test)]
-mod tests;

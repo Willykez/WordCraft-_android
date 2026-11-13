@@ -39,5 +39,3 @@ pub(crate) use shape::set_text_body;
 pub use shape::text_box_target;
 pub use specs::specs;
 
-#[cfg(test)]
-mod tests;

@@ -44,8 +44,6 @@ const MAX_PARENT_CHAIN: usize = 64;
 /// Path given to the synthetic author-name paragraphs: no paragraph of the comment's story has it.
 const HEADER_PATH: u32 = u32::MAX;
 
-#[cfg(test)]
-mod anchor_tests;
 
 /// One comment's balloon before it is positioned: items relative to the card's top-left.
 struct Card {

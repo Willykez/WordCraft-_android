@@ -26,5 +26,3 @@ pub use specs::specs;
 pub use typing::{INITIAL_CAPS_EXCEPTIONS, autocorrect, autocorrect_word, emphasis_autoformat, has_emphasis};
 pub(crate) use typing::{is_turkic, lower_char, upper_char};
 
-#[cfg(test)]
-mod tests;

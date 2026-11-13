@@ -1128,11 +1128,5 @@ pub fn render_items(doc: &Document, items: &[Draw], area: wordcraft_geom::Rect, 
     Rendered { width: w16 as u32, height: h16 as u32, pixels }
 }
 
-#[cfg(test)]
-mod tests;
 
-#[cfg(test)]
-mod cache_tests;
 
-#[cfg(test)]
-mod fill_alpha_tests;

@@ -29,6 +29,7 @@ fun StatusBar(ui: EditorUiState, vm: EditorViewModel) {
             Text("Page ${(ui.caret?.page?.toInt() ?: 0) + 1} of ${ui.pages.size.coerceAtLeast(1)}", fontSize = 11.sp)
             Text("${st?.wordCount ?: 0u} words", fontSize = 11.sp)
             Spacer(Modifier.weight(1f))
+            Text(if (ui.showRuler) "Ruler ✓" else "Ruler", Modifier.clickable { vm.toggleRuler() }, fontSize = 11.sp)
             Text("${(ui.zoom * 100).roundToInt()}%", Modifier.clickable { vm.openPanel("zoom") }, fontSize = 11.sp)
         }
     }
@@ -92,6 +93,32 @@ fun MiniToolbar(ui: EditorUiState, d: Dispatcher, modifier: Modifier = Modifier)
             ColorMenu("Font color", Icons.Default.FormatColorText, ui.isEnabled("format.color"), st.color ?: "auto", Color.Red) { d.id("format.color", mapOf("color" to it)) }
             Tool(ui, d, "para.bullets", "Bullets", Icons.Default.FormatListBulleted)
             Tool(ui, d, "format.clear", "Clear formatting", Icons.Default.FormatClear)
+        }
+    }
+}
+
+/** Tap a squiggled word: the problem, its suggestions, and Ignore / Add to dictionary. */
+@Composable
+fun ProofBar(ui: EditorUiState, vm: EditorViewModel, modifier: Modifier = Modifier) {
+    val issue = ui.issue ?: return
+    val suggestions = remember(issue) { issue.optJSONArray("suggestions")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty() }
+    val grammar = issue.optString("kind") == "grammar"
+    Surface(modifier, shape = RoundedCornerShape(10.dp), color = Color.White, shadowElevation = 10.dp, tonalElevation = 2.dp) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    (if (grammar) "Grammar: " else "Spelling: ") + issue.optString("message").ifEmpty { "\"${issue.optString("text")}\"" },
+                    Modifier.weight(1f), fontSize = 12.sp, color = Color(0xFFC00000),
+                )
+                IconButton(vm::dismissIssue, Modifier.size(28.dp)) { Icon(Icons.Default.Close, "Dismiss", Modifier.size(16.dp)) }
+            }
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (suggestions.isEmpty()) Text("No suggestions", fontSize = 12.sp, color = Color.Gray)
+                suggestions.forEach { sg -> AssistChip({ vm.fixIssue("review.applySuggestion", mapOf("text" to sg)) }, { Text(sg) }) }
+                VerticalDivider(Modifier.height(20.dp))
+                TextButton({ vm.fixIssue("review.ignoreAll") }) { Text("Ignore all", fontSize = 12.sp) }
+                if (!grammar) TextButton({ vm.fixIssue("review.addToDictionary") }) { Text("Add to dictionary", fontSize = 12.sp) }
+            }
         }
     }
 }

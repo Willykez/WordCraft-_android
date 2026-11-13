@@ -88,6 +88,7 @@ fun PanelHost(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, modifier: M
                         "nav" -> NavContent(ui, vm)
                         "styles" -> StylesContent(ui, d)
                         "format" -> FormatContent(ui, d)
+                        "review" -> ReviewContent(ui, vm)
                         "comments" -> CommentsContent(ui, vm)
                         "clipboard" -> ClipboardContent(vm, d)
                         "info" -> InfoContent(ui, vm)
@@ -282,6 +283,72 @@ private fun SearchContent(ui: EditorUiState, d: Dispatcher) {
         Column(Modifier.fillMaxWidth().clickable { d(c) }.padding(vertical = 6.dp)) {
             Text(c.label, fontSize = 14.sp)
             Text(c.location + if (c.shortcut.isNotEmpty()) "  ·  ${c.shortcut.substringBefore(" / ")}" else "", fontSize = 11.sp, color = Color.Gray)
+        }
+    }
+}
+
+/** Tracked changes (accept / reject one by one) and proofing issues, in one panel. */
+@Composable
+private fun ReviewContent(ui: EditorUiState, vm: EditorViewModel) {
+    var tab by remember { mutableIntStateOf(0) }
+    var changes by remember { mutableStateOf(listOf<JSONObject>()) }
+    var issues by remember { mutableStateOf(listOf<JSONObject>()) }
+    val rev = ui.state?.revision
+    fun parse(out: String) = runCatching { JSONArray(out).let { a -> (0 until a.length()).map { a.getJSONObject(it) } } }.getOrDefault(emptyList())
+    fun load() {
+        vm.query("review.changes") { changes = parse(it) }
+        vm.query("review.issues") { issues = parse(it) }
+    }
+    LaunchedEffect(rev) { load() }
+    /** Put the caret on the item first: accept/reject/apply all act at the selection. */
+    fun at(item: JSONObject, then: () -> Unit) =
+        vm.runJson("caret.set", JSONObject().put("pos", item.get("start")).toString()) { then() }
+
+    TabRow(tab, containerColor = Color.Transparent) {
+        Tab(tab == 0, { tab = 0 }, text = { Text("Changes (${changes.size})", fontSize = 12.sp) })
+        Tab(tab == 1, { tab = 1 }, text = { Text("Proofing (${issues.size})", fontSize = 12.sp) })
+    }
+    Spacer(Modifier.height(8.dp))
+    if (tab == 0) {
+        val tracking = ui.state?.trackChanges == true
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Track changes", Modifier.weight(1f), fontSize = 13.sp)
+            Switch(tracking, { vm.run("review.trackChanges", mapOf("value" to it)) })
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            AssistChip({ vm.run("review.previousChange") }, { Text("Previous") })
+            AssistChip({ vm.run("review.nextChange") }, { Text("Next") })
+            AssistChip({ vm.run("review.acceptAll") { load() } }, { Text("Accept all") })
+            AssistChip({ vm.run("review.rejectAll") { load() } }, { Text("Reject all") })
+        }
+        if (changes.isEmpty()) Text("No tracked changes.", Modifier.padding(top = 8.dp), fontSize = 13.sp, color = Color.Gray)
+        changes.forEach { c ->
+            val kind = when (c.optString("kind")) { "insert" -> "Inserted"; "delete" -> "Deleted"; "format" -> "Formatted"; "moveFrom" -> "Moved from"; "moveTo" -> "Moved to"; else -> c.optString("kind") }
+            Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                Column(Modifier.padding(8.dp)) {
+                    Text("$kind · ${c.optString("author").ifEmpty { "Unknown" }}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = WordBlue)
+                    val text = c.optString("description").ifEmpty { c.optString("text") }
+                    if (text.isNotBlank()) Text(text.take(120), fontSize = 13.sp)
+                    Row {
+                        TextButton({ at(c) { vm.run("review.accept") { load() } } }) { Text("Accept") }
+                        TextButton({ at(c) { vm.run("review.reject") { load() } } }) { Text("Reject") }
+                        TextButton({ at(c) { } }) { Text("Go to") }
+                    }
+                }
+            }
+        }
+    } else {
+        if (issues.isEmpty()) Text("No spelling or grammar issues.", fontSize = 13.sp, color = Color.Gray)
+        issues.take(60).forEach { i ->
+            val sugg = i.optJSONArray("suggestions")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty().take(4)
+            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Text("${i.optString("text")} · ${if (i.optString("kind") == "grammar") "Grammar" else "Spelling"}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                if (i.optString("message").isNotBlank()) Text(i.optString("message"), fontSize = 11.sp, color = Color.Gray)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    sugg.forEach { sg -> AssistChip({ at(i) { vm.run("select.word") { vm.run("review.applySuggestion", mapOf("text" to sg)) { load() } } } }, { Text(sg) }) }
+                    AssistChip({ at(i) { vm.run("select.word") { vm.run("review.ignoreAll") { load() } } } }, { Text("Ignore all") })
+                }
+            }
         }
     }
 }

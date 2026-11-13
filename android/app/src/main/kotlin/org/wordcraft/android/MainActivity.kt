@@ -130,6 +130,7 @@ class MainActivity : ComponentActivity() {
                 onPin = { vm.pinRecent(it.uri) },
                 onRemove = { vm.forgetRecent(it.uri) },
                 onClear = vm::clearRecents,
+                thumbFor = vm::thumbnail,
             )
         }
 

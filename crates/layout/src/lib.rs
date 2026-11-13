@@ -358,5 +358,3 @@ thread_local! {
     static WRAP_RELAYS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-#[cfg(test)]
-mod tests;

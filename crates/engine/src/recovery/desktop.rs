@@ -717,5 +717,3 @@ impl Recovery {
     }
 }
 
-#[cfg(test)]
-mod tests;

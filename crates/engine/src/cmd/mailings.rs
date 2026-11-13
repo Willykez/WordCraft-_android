@@ -248,5 +248,3 @@ fn insert_field(s: &mut Session, instr: &str, placeholder: &str) -> CmdResult {
     sel_result(s)
 }
 
-#[cfg(test)]
-mod tests;

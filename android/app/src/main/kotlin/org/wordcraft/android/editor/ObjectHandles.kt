@@ -105,3 +105,88 @@ fun ObjectHandles(
         }
     }
 }
+
+/**
+ * Grips on the borders of the table under the caret: drag a column border sideways, a row border
+ * down, or the corner to scale the whole table. The engine is asked once, on release, with the
+ * drag in page points, so each drag is one undo step.
+ */
+@Composable
+fun TableHandles(
+    geo: org.wordcraft.bridge.TableGeo,
+    pxPerPt: Float,
+    onDrag: (x: Float, y: Float, toX: Float, toY: Float) -> Unit,
+) {
+    val density = LocalDensity.current
+    val midY = (geo.top + geo.bottom) / 2f
+    val midX = (geo.cols.firstOrNull() ?: 0f).let { l -> (l + (geo.cols.lastOrNull() ?: l)) / 2f }
+
+    // Column borders (including the table's outer edges): grips above the table, a guide line while dragging.
+    geo.cols.forEachIndexed { i, cx ->
+        key(geo, i) {
+            var d by remember { mutableFloatStateOf(0f) }
+            Box(
+                Modifier
+                    .offset { IntOffset(((cx + d) * pxPerPt - with(density) { 14.dp.toPx() }).roundToInt(), (geo.top * pxPerPt - with(density) { 26.dp.toPx() }).roundToInt()) }
+                    .size(28.dp, 24.dp)
+                    .pointerInput(geo, i) {
+                        detectDragGestures(onDragEnd = { val moved = d; d = 0f; if (moved != 0f) onDrag(cx, midY, cx + moved, midY) }, onDragCancel = { d = 0f }) { c, drag ->
+                            c.consume(); d += drag.x / pxPerPt
+                        }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.size(width = 14.dp, height = 18.dp).background(WordBlue, androidx.compose.foundation.shape.RoundedCornerShape(5.dp)))
+            }
+            if (d != 0f) {
+                Box(
+                    Modifier.offset { IntOffset(((cx + d) * pxPerPt).roundToInt(), (geo.top * pxPerPt).roundToInt()) }
+                        .size(2.dp, with(density) { ((geo.bottom - geo.top) * pxPerPt).toDp() })
+                        .background(WordBlue),
+                )
+            }
+        }
+    }
+
+    // Row borders: grips on the table's left edge, outside the text.
+    geo.rowBottoms.forEachIndexed { i, by ->
+        key(geo, "r$i") {
+            var d by remember { mutableFloatStateOf(0f) }
+            val left = geo.cols.firstOrNull() ?: 0f
+            Box(
+                Modifier
+                    .offset { IntOffset((left * pxPerPt - with(density) { 24.dp.toPx() }).roundToInt(), ((by + d) * pxPerPt - with(density) { 12.dp.toPx() }).roundToInt()) }
+                    .size(24.dp, 24.dp)
+                    .pointerInput(geo, i) {
+                        detectDragGestures(onDragEnd = { val moved = d; d = 0f; if (moved != 0f) onDrag(midX, by, midX, by + moved) }, onDragCancel = { d = 0f }) { c, drag ->
+                            c.consume(); d += drag.y / pxPerPt
+                        }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.size(width = 16.dp, height = 8.dp).background(WordBlue, androidx.compose.foundation.shape.RoundedCornerShape(4.dp)))
+            }
+        }
+    }
+
+    // Corner: scales the whole table.
+    key(geo, "corner") {
+        var dx by remember { mutableFloatStateOf(0f) }
+        var dy by remember { mutableFloatStateOf(0f) }
+        val right = geo.cols.lastOrNull() ?: 0f
+        Box(
+            Modifier
+                .offset { IntOffset(((right + dx) * pxPerPt).roundToInt(), ((geo.bottom + dy) * pxPerPt).roundToInt()) }
+                .size(26.dp)
+                .pointerInput(geo) {
+                    detectDragGestures(
+                        onDragEnd = { val a = dx; val b = dy; dx = 0f; dy = 0f; if (a != 0f || b != 0f) onDrag(right + 3f, geo.bottom + 3f, right + 3f + a, geo.bottom + 3f + b) },
+                        onDragCancel = { dx = 0f; dy = 0f },
+                    ) { c, drag -> c.consume(); dx += drag.x / pxPerPt; dy += drag.y / pxPerPt }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.size(14.dp).background(Color.White, androidx.compose.foundation.shape.CircleShape).border(2.dp, WordBlue, androidx.compose.foundation.shape.CircleShape))
+        }
+    }
+}

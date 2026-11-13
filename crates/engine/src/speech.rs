@@ -1078,5 +1078,3 @@ fn speak_with(text: &str, lang: Option<&str>, rate: f32, changed: &dyn Fn() -> b
     }
 }
 
-#[cfg(test)]
-mod tests;

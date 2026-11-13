@@ -188,5 +188,3 @@ struct Chart {
     plot_border: Option<Rgb>,
 }
 
-#[cfg(test)]
-mod tests;

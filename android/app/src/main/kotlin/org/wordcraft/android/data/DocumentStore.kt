@@ -53,7 +53,7 @@ class DocumentStore(private val ctx: Context) {
     }
 
     fun togglePin(uri: String) = save(recents().map { if (it.uri == uri) it.copy(pinned = !it.pinned) else it })
-    fun forget(uri: String) = save(recents().filter { it.uri != uri })
+    fun forget(uri: String) { thumbFile(uri).delete(); save(recents().filter { it.uri != uri }) }
     fun clear() = save(recents().filter { it.pinned })
 
     // ---- recovery copy (never leaves the device) ------------------------------------------------
@@ -80,4 +80,17 @@ class DocumentStore(private val ctx: Context) {
         recoveryFile.delete()
         prefs.edit().remove("rec_name").remove("rec_src").remove("rec_time").apply()
     }
+
+    // ---- page-1 thumbnails for the home screen (kept on the device) ----------------------------
+
+    private fun thumbFile(key: String) = java.io.File(ctx.filesDir, "thumbs/${key.hashCode().toUInt()}.png")
+
+    fun writeThumbnail(key: String, bmp: android.graphics.Bitmap) {
+        val f = thumbFile(key)
+        f.parentFile?.mkdirs()
+        runCatching { f.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, it) } }
+    }
+
+    fun thumbnail(key: String): android.graphics.Bitmap? =
+        thumbFile(key).takeIf { it.exists() }?.let { runCatching { android.graphics.BitmapFactory.decodeFile(it.path) }.getOrNull() }
 }
