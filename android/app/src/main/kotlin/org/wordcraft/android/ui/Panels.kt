@@ -190,7 +190,7 @@ private fun FormatContent(ui: EditorUiState, d: Dispatcher) {
     PanelSection("Color") {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ColorMenu("Font color", Icons.Default.FormatColorText, true) { d.id("format.color", mapOf("color" to it)) }
-            ColorMenu("Highlight", Icons.Default.FormatColorFill, true) { d.id("format.highlight", mapOf("color" to it)) }
+            HighlightMenu(true, st?.highlight) { d.id("format.highlight", mapOf("color" to it)) }
         }
     }
     val effects = listOf(

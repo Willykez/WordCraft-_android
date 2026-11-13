@@ -26,6 +26,8 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     var keyboardShown by remember { mutableStateOf(false) }
+    // Bumped when the caret is moved by touch, so the keyboard's text buffer starts afresh there.
+    var typingReset by remember { mutableIntStateOf(0) }
     val snackbar = remember { SnackbarHostState() }
     val st = ui.state
 
@@ -45,9 +47,9 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
                 PageCanvas(
                     vm = vm, pages = ui.pages, caret = ui.caret, selection = ui.selection,
                     revision = st?.revision ?: 0uL, zoom = ui.zoom, onZoom = vm::setZoom, marks = st?.showMarks == true, obj = ui.obj, tableGeo = ui.tableGeo, ruler = ui.ruler,
-                    onTapped = { runCatching { focus.requestFocus() }; keyboard?.show(); keyboardShown = true },
+                    onTapped = { typingReset++; runCatching { focus.requestFocus() }; keyboard?.show(); keyboardShown = true },
                 )
-                TypingSink(vm, focus) { s ->
+                TypingSink(vm, focus, typingReset) { s ->
                     when (s) {
                         "copy" -> actions.copy(false); "cut" -> actions.copy(true); "paste" -> actions.paste()
                         "save" -> actions.save(); "find" -> vm.openPanel("find")

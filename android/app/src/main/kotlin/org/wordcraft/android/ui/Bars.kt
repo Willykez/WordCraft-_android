@@ -58,7 +58,7 @@ fun QuickBar(ui: EditorUiState, d: Dispatcher, vm: EditorViewModel, keyboardShow
             q("format.bold", Icons.Default.FormatBold, "Bold", st?.bold == true)
             q("format.italic", Icons.Default.FormatItalic, "Italic", st?.italic == true)
             q("format.underline", Icons.Default.FormatUnderlined, "Underline", st?.underline == true)
-            ColorMenu("Highlight", Icons.Default.FormatColorFill, ui.isEnabled("format.highlight")) { d.id("format.highlight", mapOf("color" to it)) }
+            HighlightMenu(ui.isEnabled("format.highlight"), st?.highlight) { d.id("format.highlight", mapOf("color" to it)) }
             VerticalDivider(Modifier.height(22.dp))
             q("para.bullets", Icons.Default.FormatListBulleted, "Bullets")
             q("para.numbering", Icons.Default.FormatListNumbered, "Numbering")
@@ -89,7 +89,7 @@ fun MiniToolbar(ui: EditorUiState, d: Dispatcher, modifier: Modifier = Modifier)
             Tool(ui, d, "format.bold", "Bold", Icons.Default.FormatBold, st.bold)
             Tool(ui, d, "format.italic", "Italic", Icons.Default.FormatItalic, st.italic)
             Tool(ui, d, "format.underline", "Underline", Icons.Default.FormatUnderlined, st.underline)
-            ColorMenu("Highlight", Icons.Default.FormatColorFill, ui.isEnabled("format.highlight"), st.highlight, Color(0xFFFFEB3B)) { d.id("format.highlight", mapOf("color" to it)) }
+            HighlightMenu(ui.isEnabled("format.highlight"), st.highlight) { d.id("format.highlight", mapOf("color" to it)) }
             ColorMenu("Font color", Icons.Default.FormatColorText, ui.isEnabled("format.color"), st.color ?: "auto", Color.Red) { d.id("format.color", mapOf("color" to it)) }
             Tool(ui, d, "para.bullets", "Bullets", Icons.Default.FormatListBulleted)
             Tool(ui, d, "format.clear", "Clear formatting", Icons.Default.FormatClear)

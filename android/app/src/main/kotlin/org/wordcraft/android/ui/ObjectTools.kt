@@ -371,3 +371,52 @@ internal fun ColorMenuBtn(label: String, ui: EditorUiState, onPick: (String) -> 
         Text(label, fontSize = 10.sp)
     }
 }
+
+/** Page Borders: a box or single sides, line style, width and colour, for this section or the whole document. */
+@Composable
+fun PageBordersDialog(onDismiss: () -> Unit, onApply: (kind: String, style: String, width: Float, color: String, applyTo: String) -> Unit) {
+    var kind by remember { mutableStateOf("outside") }
+    var style by remember { mutableStateOf("single") }
+    var width by remember { mutableFloatStateOf(1.5f) }
+    var color by remember { mutableStateOf("000000") }
+    var applyTo by remember { mutableStateOf("document") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Page borders") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                BorderPreview(kind, style, width, hex(color))
+                Label("Setting")
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("None" to "none", "Box" to "outside", "Top" to "top", "Bottom" to "bottom", "Left" to "left", "Right" to "right").forEach { (n, k) ->
+                        FilterChip(kind == k, { kind = k }, { Text(n) })
+                    }
+                }
+                Label("Style")
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    BORDER_STYLES.forEach { (n, k) -> FilterChip(style == k, { style = k }, { Text(n) }) }
+                }
+                Label("Width")
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    BORDER_WIDTHS.forEach { w -> FilterChip(width == w, { width = w }, { Text("$w pt") }) }
+                }
+                Label("Color")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    BORDER_COLORS.forEach { c ->
+                        Box(
+                            Modifier.size(28.dp).background(hex(c), CircleShape)
+                                .border(if (color == c) 3.dp else 1.dp, if (color == c) WordBlue else Color.Gray, CircleShape).clickable { color = c },
+                        )
+                    }
+                }
+                Label("Apply to")
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(applyTo == "document", { applyTo = "document" }, { Text("Whole document") })
+                    FilterChip(applyTo == "section", { applyTo = "section" }, { Text("This section") })
+                }
+            }
+        },
+        confirmButton = { TextButton({ onApply(kind, style, width, color, applyTo) }) { Text("Apply") } },
+        dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
+    )
+}

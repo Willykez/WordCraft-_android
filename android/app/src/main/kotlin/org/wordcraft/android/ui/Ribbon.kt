@@ -30,6 +30,7 @@ private val CURATED: Map<String, Set<String>> = mapOf(
     "Home" to setOf("Clipboard", "Font", "Paragraph", "Styles", "Editing"),
     "Insert" to setOf("Pages", "Tables", "Illustrations", "Header & Footer", "Text", "Links", "Symbols"),
     "Layout" to setOf("Page Setup", "Paragraph"),
+    "Design" to setOf("Page Background"),
 ) + CONTEXT_CURATED
 
 /** The ribbon body for one tab: Home, Insert and Layout are hand-laid-out; the rest is built from the engine's registry. */
@@ -41,6 +42,7 @@ fun RibbonBody(ui: EditorUiState, tab: String, d: Dispatcher) {
                 "Home" -> HomeGroups(ui, d)
                 "Insert" -> InsertGroups(ui, d)
                 "Layout" -> LayoutGroups(ui, d)
+                "Design" -> DesignGroups(ui, d)
                 "Table Design" -> TableDesignGroups(ui, d)
                 "Table Layout" -> TableLayoutGroups(ui, d)
                 "Picture Format" -> PictureFormatGroups(ui, d)
@@ -134,7 +136,7 @@ private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
                 Tool(ui, d, "format.subscript", "Subscript", Icons.Default.Subscript, st?.subscript == true)
                 Tool(ui, d, "format.superscript", "Superscript", Icons.Default.Superscript, st?.superscript == true)
                 ColorMenu("Font color", Icons.Default.FormatColorText, on("format.color"), st?.color ?: "auto", fallbackBar = Color.Red) { d.id("format.color", mapOf("color" to it)) }
-                ColorMenu("Highlight", Icons.Default.FormatColorFill, on("format.highlight"), st?.highlight, fallbackBar = Color(0xFFFFEB3B)) { d.id("format.highlight", mapOf("color" to it)) }
+                HighlightMenu(on("format.highlight"), st?.highlight) { d.id("format.highlight", mapOf("color" to it)) }
                 Tool(ui, d, "format.clear", "Clear formatting", Icons.Default.FormatClear)
             }
         }
@@ -226,6 +228,38 @@ private val PALETTE = listOf(
 )
 
 private fun hexColor(hex: String?): Color? = hex?.takeIf { it.length == 6 }?.toLongOrNull(16)?.let { Color(0xFF000000 or it) }
+
+/** Word's highlight colours: the engine takes these names, not hex values. */
+private val HIGHLIGHTS = listOf(
+    Triple("yellow", "Yellow", 0xFFFFFF00), Triple("green", "Bright green", 0xFF00FF00), Triple("cyan", "Turquoise", 0xFF00FFFF),
+    Triple("magenta", "Pink", 0xFFFF00FF), Triple("blue", "Blue", 0xFF0000FF), Triple("red", "Red", 0xFFFF0000),
+    Triple("darkBlue", "Dark blue", 0xFF000080), Triple("darkCyan", "Teal", 0xFF008080), Triple("darkGreen", "Green", 0xFF008000),
+    Triple("darkMagenta", "Violet", 0xFF800080), Triple("darkRed", "Dark red", 0xFF800000), Triple("darkYellow", "Dark yellow", 0xFF808000),
+    Triple("darkGray", "Gray 50%", 0xFF808080), Triple("lightGray", "Gray 25%", 0xFFC0C0C0), Triple("black", "Black", 0xFF000000),
+)
+
+/** Text highlight colour button; `current` is the engine's name for the colour under the caret. */
+@Composable
+fun HighlightMenu(enabled: Boolean, current: String?, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val bar = HIGHLIGHTS.firstOrNull { it.first.equals(current, ignoreCase = true) }?.let { Color(it.third) } ?: Color(0xFFFFEB3B)
+    Box {
+        Box(contentAlignment = Alignment.BottomCenter) {
+            MiniToggle(Icons.Default.FormatColorFill, "Text highlight color", false, enabled) { open = true }
+            Box(Modifier.padding(bottom = 2.dp).width(16.dp).height(3.dp).background(bar))
+        }
+        DropdownMenu(open, { open = false }, Modifier.heightIn(max = 400.dp)) {
+            HIGHLIGHTS.forEach { (name, label, argb) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    leadingIcon = { Box(Modifier.size(18.dp).background(Color(argb), CircleShape).border(1.dp, Color.Gray, CircleShape)) },
+                    onClick = { open = false; onPick(name) },
+                )
+            }
+            DropdownMenuItem(text = { Text("No color") }, onClick = { open = false; onPick("none") })
+        }
+    }
+}
 
 /** A colour button with Word's colour bar under the icon showing the current value. */
 @Composable
