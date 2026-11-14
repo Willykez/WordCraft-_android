@@ -3,6 +3,8 @@ package org.wordcraft.android.ui
 import android.text.format.DateUtils
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import org.wordcraft.android.R
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -109,8 +111,12 @@ fun HomeScreen(
                         .statusBarsPadding().padding(horizontal = 20.dp).padding(top = 18.dp, bottom = 22.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(Color.White), contentAlignment = Alignment.Center) {
-                            Text("W", color = WordBlue, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+                        Box(
+                            Modifier.size(46.dp).clip(RoundedCornerShape(12.dp))
+                                .background(Brush.radialGradient(listOf(Color(0xFF0F4C8E), Color(0xFF051A3D)))),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Image(painterResource(R.drawable.wordcraft_logo), "WordCraft", Modifier.padding(5.dp))
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {

@@ -231,11 +231,11 @@ private fun hexColor(hex: String?): Color? = hex?.takeIf { it.length == 6 }?.toL
 
 /** Word's highlight colours: the engine takes these names, not hex values. */
 private val HIGHLIGHTS = listOf(
-    Triple("yellow", "Yellow", 0xFFFFFF00), Triple("green", "Bright green", 0xFF00FF00), Triple("cyan", "Turquoise", 0xFF00FFFF),
-    Triple("magenta", "Pink", 0xFFFF00FF), Triple("blue", "Blue", 0xFF0000FF), Triple("red", "Red", 0xFFFF0000),
-    Triple("darkBlue", "Dark blue", 0xFF000080), Triple("darkCyan", "Teal", 0xFF008080), Triple("darkGreen", "Green", 0xFF008000),
-    Triple("darkMagenta", "Violet", 0xFF800080), Triple("darkRed", "Dark red", 0xFF800000), Triple("darkYellow", "Dark yellow", 0xFF808000),
-    Triple("darkGray", "Gray 50%", 0xFF808080), Triple("lightGray", "Gray 25%", 0xFFC0C0C0), Triple("black", "Black", 0xFF000000),
+    Triple("yellow", "Yellow", 0xFFFFFF00), Triple("brightGreen", "Bright green", 0xFF00FF00), Triple("turquoise", "Turquoise", 0xFF00FFFF),
+    Triple("pink", "Pink", 0xFFFF00FF), Triple("blue", "Blue", 0xFF0000FF), Triple("red", "Red", 0xFFFF0000),
+    Triple("darkBlue", "Dark blue", 0xFF000080), Triple("teal", "Teal", 0xFF008080), Triple("green", "Green", 0xFF008000),
+    Triple("violet", "Violet", 0xFF800080), Triple("darkRed", "Dark red", 0xFF800000), Triple("darkYellow", "Dark yellow", 0xFF808000),
+    Triple("gray50", "Gray 50%", 0xFF808080), Triple("gray25", "Gray 25%", 0xFFC0C0C0), Triple("black", "Black", 0xFF000000),
 )
 
 /** Text highlight colour button; `current` is the engine's name for the colour under the caret. */

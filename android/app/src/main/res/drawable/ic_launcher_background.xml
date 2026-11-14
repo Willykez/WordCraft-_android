@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Blueprint-blue tile behind the emblem: radial gradient, a faint grid and a ring, like the artwork. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="54" android:centerY="47.5" android:gradientRadius="80">
+                <item android:offset="0.0" android:color="#FF0F4C8E" />
+                <item android:offset="0.6" android:color="#FF0A3166" />
+                <item android:offset="1.0" android:color="#FF051A3D" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M12,0V108M0,12H108M24,0V108M0,24H108M36,0V108M0,36H108M48,0V108M0,48H108M60,0V108M0,60H108M72,0V108M0,72H108M84,0V108M0,84H108M96,0V108M0,96H108" android:strokeColor="#12FFFFFF" android:strokeWidth="0.4" />
+    <path android:pathData="M54,14.8a33,33 0 1,0 0.001,0z" android:strokeColor="#18FFFFFF" android:strokeWidth="0.5" />
+</vector>

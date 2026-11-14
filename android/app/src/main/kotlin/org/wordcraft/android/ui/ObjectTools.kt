@@ -203,8 +203,8 @@ fun ObjectBar(ui: EditorUiState, d: Dispatcher, vm: EditorViewModel, modifier: M
                 ColorMenu("Picture border", Icons.Default.BorderColor, true, borderC, Color.Gray) { c -> borderC = if (c == "auto") "000000" else c; d.id("picture.border", mapOf("color" to borderC, "width" to borderW)) }
                 MiniMenu(Icons.Default.LineWeight, "Border width", true, listOf(1, 2, 3, 5, 8, 12).map { w -> MenuEntry("$w px") { borderW = w; d.id("picture.border", mapOf("color" to borderC, "width" to w)) } })
             } else {
-                ColorMenu("Shape fill", Icons.Default.FormatColorFill, true, null, Color(0xFF90CAF9)) { c -> d.id("shape.fill", mapOf("color" to c)) }
-                ColorMenu("Shape outline", Icons.Default.BorderColor, true, null, Color.Gray) { c -> d.id("shape.outline", mapOf("color" to c)) }
+                ColorMenu("Shape fill", Icons.Default.FormatColorFill, true, null, Color(0xFF90CAF9)) { c -> d.id("shape.fill", mapOf("color" to if (c == "auto") JSONObject.NULL else c)) }
+                ColorMenu("Shape outline", Icons.Default.BorderColor, true, null, Color.Gray) { c -> d.id("shape.outline", mapOf("color" to if (c == "auto") JSONObject.NULL else c)) }
             }
             MiniToggle(Icons.Default.FlipToFront, "Bring forward", false, on("arrange.bringForward")) { d.id("arrange.bringForward") }
             MiniToggle(Icons.Default.FlipToBack, "Send backward", false, on("arrange.sendBackward")) { d.id("arrange.sendBackward") }
