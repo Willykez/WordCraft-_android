@@ -77,6 +77,8 @@ pub struct ObjRect {
     pub picture: bool,
     /// `inline`, `square`, `tight`, `through`, `topAndBottom`, `behindText` or `inFrontOfText`.
     pub wrap: String,
+    /// Clockwise rotation about the frame's centre, in degrees.
+    pub degrees: f32,
 }
 
 /// Grid of the table under the caret, in page points (for column/row drag handles).
@@ -114,6 +116,36 @@ pub struct RulerInfo {
     /// Right indent, from the column's right edge.
     pub right: f32,
     pub tabs: Vec<RulerTab>,
+}
+
+/// One button of Word's ribbon that this engine implements (tab, group, label as Word shows them).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct CatalogItem {
+    pub tab: String,
+    pub group: String,
+    pub label: String,
+    pub id: String,
+    pub params: String,
+    pub shortcut: String,
+}
+
+/// A heading for the Navigation pane; `pos` is a position the UI passes back to `select.range`.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct HeadingItem {
+    pub level: u32,
+    pub text: String,
+    pub pos: String,
+}
+
+/// One match of a text search: a snippet around it and the range to select to jump there.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct SearchHit {
+    pub snippet: String,
+    /// Where the match starts within the snippet (characters), so the UI can bold it.
+    pub match_start: u32,
+    pub match_len: u32,
+    pub start: String,
+    pub end: String,
 }
 
 #[derive(Clone, Copy, Debug, uniffi::Record)]
@@ -360,6 +392,95 @@ impl MobileSession {
         s.run("caret.set", &params).map(|_| ()).map_err(fail)
     }
 
+    /// Every ribbon button of Word that this engine implements, in Word's own order and wording.
+    pub fn ribbon_catalog(&self) -> Vec<CatalogItem> {
+        let g = self.lock();
+        let s = &g.session;
+        wordcraft_engine::catalog::entries()
+            .into_iter()
+            .filter_map(|(tab, group, label, id)| {
+                let spec = s.registry.get(id)?;
+                Some(CatalogItem {
+                    tab: tab.to_string(),
+                    group: group.to_string(),
+                    label: label.to_string(),
+                    id: id.to_string(),
+                    params: spec.params.to_string(),
+                    shortcut: spec.shortcut.to_string(),
+                })
+            })
+            .collect()
+    }
+
+    /// Headings of the body (paragraphs with an outline level), for the Navigation pane.
+    pub fn headings(&self) -> Vec<HeadingItem> {
+        use wordcraft_engine::doc::{Pos, StoryRef};
+        let g = self.lock();
+        let doc = &g.session.doc;
+        let mut out = Vec::new();
+        for path in doc.para_paths(StoryRef::Body) {
+            let Some(p) = doc.para(StoryRef::Body, &path) else { continue };
+            let rp = doc.styles.resolve_para(&p.props);
+            let Some(level) = rp.outline_level.filter(|l| *l < 9) else { continue }; // 9 = body text
+            let text = p.plain_text().trim().to_string();
+            if text.is_empty() || rp.style.starts_with("TOC") {
+                continue;
+            }
+            let pos = Pos::new(StoryRef::Body, path.clone(), 0);
+            out.push(HeadingItem { level: u32::from(level) + 1, text, pos: serde_json::to_string(&pos).unwrap_or_default() });
+        }
+        out
+    }
+
+    /// Find `query` in the body text: up to `limit` matches, each with a snippet and the range to select.
+    pub fn search_text(&self, query: String, match_case: bool, whole_word: bool, limit: u32) -> Vec<SearchHit> {
+        use wordcraft_engine::doc::{Pos, StoryRef};
+        let needle = if match_case { query.clone() } else { query.to_lowercase() };
+        if needle.is_empty() {
+            return Vec::new();
+        }
+        let g = self.lock();
+        let doc = &g.session.doc;
+        let mut out = Vec::new();
+        'paras: for path in doc.para_paths(StoryRef::Body) {
+            let Some(p) = doc.para(StoryRef::Body, &path) else { continue };
+            let text = p.plain_text();
+            let hay = if match_case { text.clone() } else { text.to_lowercase() };
+            if hay.len() != text.len() {
+                continue; // case folding changed byte lengths: offsets would not line up
+            }
+            let mut from = 0usize;
+            while let Some(i) = hay[from..].find(&needle) {
+                let start = from + i;
+                let end = start + needle.len();
+                from = end.max(start + 1);
+                if whole_word {
+                    let before = text[..start].chars().next_back().is_some_and(char::is_alphanumeric);
+                    let after = text[end..].chars().next().is_some_and(char::is_alphanumeric);
+                    if before || after {
+                        continue;
+                    }
+                }
+                let lead: String = text[..start].chars().rev().take(28).collect::<Vec<_>>().into_iter().rev().collect();
+                let trail: String = text[end..].chars().take(40).collect();
+                let hit: String = text[start..end].to_string();
+                let a = Pos::new(StoryRef::Body, path.clone(), start);
+                let b = Pos::new(StoryRef::Body, path.clone(), end);
+                out.push(SearchHit {
+                    snippet: format!("{lead}{hit}{trail}"),
+                    match_start: u32::try_from(lead.chars().count()).unwrap_or(0),
+                    match_len: u32::try_from(hit.chars().count()).unwrap_or(0),
+                    start: serde_json::to_string(&a).unwrap_or_default(),
+                    end: serde_json::to_string(&b).unwrap_or_default(),
+                });
+                if out.len() >= limit as usize {
+                    break 'paras;
+                }
+            }
+        }
+        out
+    }
+
     /// The table under the caret: its grid lines on the caret's page, so the UI can offer drag handles.
     pub fn table_geometry(&self) -> Option<TableGeo> {
         let c = self.caret()?;
@@ -427,6 +548,7 @@ impl MobileSession {
             h: hit.rect.h,
             picture: s.why_disabled("picture.reset").is_none(),
             wrap,
+            degrees: hit.spin.deg,
         })
     }
 

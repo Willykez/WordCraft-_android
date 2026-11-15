@@ -103,7 +103,7 @@ private fun Label(t: String) = Text(t, fontSize = 12.sp, fontWeight = FontWeight
 
 /** A sample box showing roughly what the chosen border will look like. */
 @Composable
-private fun BorderPreview(kind: String, style: String, width: Float, color: Color) {
+internal fun BorderPreview(kind: String, style: String, width: Float, color: Color) {
     Canvas(Modifier.fillMaxWidth().height(84.dp).background(Color.White, RoundedCornerShape(6.dp)).border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(6.dp))) {
         val pad = 18.dp.toPx(); val l = pad; val t = pad * 0.8f; val r = size.width - pad; val b = size.height - pad * 0.8f
         val stroke = (width * 2.2f).coerceAtLeast(1.5f) * if (style == "thick") 2f else 1f
@@ -252,7 +252,6 @@ internal fun tableFormulaEntries(d: Dispatcher, custom: () -> Unit) =
 /** Insert, delete, merge, size, borders, shading and formulas for the table under the caret. */
 @Composable
 fun TableBar(ui: EditorUiState, d: Dispatcher, modifier: Modifier = Modifier) {
-    var borders by remember { mutableStateOf(false) }
     var formula by remember { mutableStateOf(false) }
     fun on(id: String) = ui.isEnabled(id)
     Surface(modifier, shape = RoundedCornerShape(10.dp), color = Color.White, shadowElevation = 10.dp, tonalElevation = 2.dp) {
@@ -261,7 +260,7 @@ fun TableBar(ui: EditorUiState, d: Dispatcher, modifier: Modifier = Modifier) {
             MiniMenu(Icons.Default.Delete, "Delete", true, tableDeleteEntries(d))
             MiniToggle(Icons.Default.CallMerge, "Merge cells", false, on("table.merge")) { d.id("table.merge") }
             MiniToggle(Icons.Default.CallSplit, "Split cells", false, on("table.split")) { ui.ribbon?.byId?.get("table.split")?.let { d(it) } }
-            MiniToggle(Icons.Default.BorderAll, "Borders", false) { borders = true }
+            MiniToggle(Icons.Default.BorderAll, "Format table", false) { d.vm.openPanel("tableFormat") }
             ColorMenu("Cell shading", Icons.Default.FormatColorFill, true, null, Color(0xFFB0BEC5)) { c -> d.id("table.shading", mapOf("color" to if (c == "auto") JSONObject.NULL else c)) }
             MiniMenu(Icons.Default.GridOn, "Cell alignment", true, tableAlignEntries(d))
             MiniMenu(Icons.Default.AspectRatio, "Size", true, tableAutofitEntries(d) + listOfNotNull(
@@ -273,7 +272,6 @@ fun TableBar(ui: EditorUiState, d: Dispatcher, modifier: Modifier = Modifier) {
             MiniToggle(Icons.Default.SortByAlpha, "Sort", false, on("table.sort")) { ui.ribbon?.byId?.get("table.sort")?.let { d(it) } }
         }
     }
-    if (borders) BordersDialog(true, { borders = false }) { k, _, w, c -> borders = false; d.id("table.borders", mapOf("kind" to k, "width" to w, "color" to c)) }
     if (formula) TextPromptDialog("Formula", "e.g. =SUM(ABOVE)", "=SUM(ABOVE)", { formula = false }) { formula = false; d.id("table.formula", mapOf("formula" to it)) }
 }
 
@@ -289,7 +287,6 @@ internal val CONTEXT_CURATED: Map<String, Set<String>> = mapOf(
 
 @Composable
 internal fun TableDesignGroups(ui: EditorUiState, d: Dispatcher) {
-    var borders by remember { mutableStateOf(false) }
     GroupBox("Table Styles") {
         MenuBtn("Format as table", Icons.Default.TableChart, tableStyleEntries(ui, d))
         ColorMenuBtn("Shading", ui) { c -> d.id("table.shading", mapOf("color" to if (c == "auto") JSONObject.NULL else c)) }
@@ -297,10 +294,9 @@ internal fun TableDesignGroups(ui: EditorUiState, d: Dispatcher) {
     }
     GroupBox("Style Options") { MenuBtn("Options", Icons.Default.CheckBox, tableLookEntries(d)) }
     GroupBox("Borders") {
-        RBtn("Borders", Icons.Default.BorderAll) { borders = true }
+        RBtn("Borders", Icons.Default.BorderAll) { d.vm.openPanel("tableFormat") }
         MoreMenu("Table Design", "Borders", setOf("table.borders"), ui, d)
     }
-    if (borders) BordersDialog(true, { borders = false }) { k, _, w, c -> borders = false; d.id("table.borders", mapOf("kind" to k, "width" to w, "color" to c)) }
 }
 
 @Composable

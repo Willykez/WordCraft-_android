@@ -2,6 +2,9 @@ package org.wordcraft.android.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +34,7 @@ private val CURATED: Map<String, Set<String>> = mapOf(
     "Insert" to setOf("Pages", "Tables", "Illustrations", "Header & Footer", "Text", "Links", "Symbols"),
     "Layout" to setOf("Page Setup", "Paragraph"),
     "Design" to setOf("Page Background"),
+    "Draw" to setOf("Tools", "Pens"),
 ) + CONTEXT_CURATED
 
 /** The ribbon body for one tab: Home, Insert and Layout are hand-laid-out; the rest is built from the engine's registry. */
@@ -43,6 +47,7 @@ fun RibbonBody(ui: EditorUiState, tab: String, d: Dispatcher) {
                 "Insert" -> InsertGroups(ui, d)
                 "Layout" -> LayoutGroups(ui, d)
                 "Design" -> DesignGroups(ui, d)
+                "Draw" -> DrawGroups(ui, d)
                 "Table Design" -> TableDesignGroups(ui, d)
                 "Table Layout" -> TableLayoutGroups(ui, d)
                 "Picture Format" -> PictureFormatGroups(ui, d)
@@ -62,25 +67,45 @@ internal fun toggleState(ui: EditorUiState, id: String): Boolean? = when (id) {
 
 internal fun Cmd.entry(ui: EditorUiState, d: Dispatcher) = MenuEntry(label, ui.isEnabled(id), shortcut.substringBefore(" / ")) { d(this) }
 
-/** Buttons for a group's own commands, with sub-groups folded into drop-downs and the overflow into "More". */
+/**
+ * A group as Word lays it out: one or two big buttons, or stacked small buttons (icon + label, three
+ * to a column). Long groups show the first nine and keep the rest under "More".
+ */
 @Composable
 private fun GenericGroup(g: RibbonGroup, ui: EditorUiState, d: Dispatcher) {
-    val direct = g.cmds.filter { it.sub.isEmpty() }
-    val subs = g.cmds.filter { it.sub.isNotEmpty() }.groupBy { it.sub }
-    val shown = if (direct.size > 5) direct.take(4) else direct
-    val rest = direct.drop(shown.size)
+    val cmds = g.cmds
+    val shown = if (cmds.size > 9) cmds.take(9) else cmds
+    val rest = cmds.drop(shown.size)
     GroupBox(g.name) {
-        shown.forEach { c ->
-            val on = toggleState(ui, c.id)
-            RBtn(c.label, null, ui.isEnabled(c.id), active = on == true, cmd = c) {
-                if (on != null && c.id == "review.trackChanges") d.id(c.id, mapOf("value" to !on)) else d(c)
-            }
-        }
-        subs.forEach { (name, cs) ->
-            if (cs.size == 1) RBtn(cs[0].label, null, ui.isEnabled(cs[0].id), active = toggleState(ui, cs[0].id) == true, cmd = cs[0]) { d(cs[0]) }
-            else MenuBtn(name.substringAfterLast(" › "), null, cs.map { it.entry(ui, d) }, cmd = cs[0])
+        if (shown.size <= 2) {
+            shown.forEach { c -> CmdButton(c, ui, d, big = true) }
+        } else {
+            shown.chunked(3).forEach { col -> Column(Modifier.padding(horizontal = 1.dp)) { col.forEach { c -> CmdButton(c, ui, d, big = false) } } }
         }
         if (rest.isNotEmpty()) MenuBtn("More", Icons.Default.MoreHoriz, rest.map { it.entry(ui, d) })
+    }
+}
+
+/** One command as a ribbon button: big (icon over label) or compact (icon beside label). */
+@Composable
+private fun CmdButton(c: Cmd, ui: EditorUiState, d: Dispatcher, big: Boolean) {
+    val on = toggleState(ui, c.id)
+    val enabled = ui.isEnabled(c.id)
+    val action = { if (on != null && c.id == "review.trackChanges") d.id(c.id, mapOf("value" to !on)) else d(c) }
+    if (big) {
+        RBtn(c.label, iconFor(c.id), enabled, active = on == true, cmd = c) { action() }
+    } else {
+        val ink = if (enabled) RibbonInk else RibbonInk.copy(alpha = 0.35f)
+        Row(
+            Modifier.height(30.dp).widthIn(min = 92.dp, max = 138.dp).padding(vertical = 1.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(5.dp))
+                .background(if (on == true) WordBlue.copy(alpha = 0.22f) else Color.Transparent)
+                .clickable(enabled = enabled) { action() }.padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CmdIcon(c, c.label, ink, 16)
+            Spacer(Modifier.width(6.dp))
+            Text(c.label, fontSize = 11.sp, color = ink, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -99,7 +124,6 @@ internal fun Tool(ui: EditorUiState, d: Dispatcher, id: String, label: String, i
 private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
     val st = ui.state
     fun on(id: String) = ui.isEnabled(id)
-    var paraBorders by remember { mutableStateOf(false) }
 
     // ---- Clipboard
     GroupBox("Clipboard") {
@@ -171,7 +195,7 @@ private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
                 Tool(ui, d, "para.justify", "Justify", Icons.Default.FormatAlignJustify, st?.alignment == "justify" || st?.alignment == "both")
                 Tool(ui, d, "view.marks", "Show/Hide ¶", Icons.Default.Visibility, st?.showMarks == true)
                 Tool(ui, d, "para.sort", "Sort", Icons.Default.SortByAlpha)
-                MiniToggle(Icons.Default.BorderAll, "Borders", false, on("para.borders")) { paraBorders = true }
+                MiniToggle(Icons.Default.BorderAll, "Borders and shading", false, on("para.borders")) { d.vm.openPanel("borders") }
             }
         }
         val lineIds = ui.ribbon?.tabCmds("Home").orEmpty().filter { it.sub == "Line Spacing" }.map { it.id }
@@ -182,15 +206,11 @@ private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
         )
     }
 
-    // ---- Styles gallery
+    // ---- Styles gallery: Word-style tiles
     GroupBox("Styles") {
-        val names = ui.styles.ifEmpty { listOf("Normal", "Heading 1", "Heading 2", "Heading 3", "Title") }
-        Row(Modifier.widthIn(max = 260.dp).horizontalScroll(rememberScrollState())) {
-            names.forEach { n ->
-                FilterChip(
-                    selected = st?.styleName == n, onClick = { d.id("para.style", mapOf("style" to n)) },
-                    label = { Text(n) }, modifier = Modifier.padding(horizontal = 2.dp),
-                )
+        Row(Modifier.widthIn(max = 286.dp).horizontalScroll(rememberScrollState()).padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            styleTiles(ui.styles).forEach { spec ->
+                StyleTile(spec, styleMatches(st?.styleName, spec)) { d.id("para.style", mapOf("style" to spec.id)) }
             }
         }
         RBtn("Styles pane", Icons.Default.Style) { d.id("styles.pane") }
@@ -204,11 +224,6 @@ private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
         val select = ui.ribbon?.tabCmds("Home").orEmpty().filter { it.sub == "Select" }
         if (select.isNotEmpty()) MenuBtn("Select", Icons.Default.SelectAll, select.map { it.entry(ui, d) })
         MoreMenu("Home", "Editing", setOf("edit.find", "edit.replace") + select.map { it.id }, ui, d)
-    }
-
-    if (paraBorders) BordersDialog(false, { paraBorders = false }) { k, style, w, c ->
-        paraBorders = false
-        d.id("para.borders", mapOf("kind" to k, "style" to style, "width" to w, "color" to c))
     }
 }
 

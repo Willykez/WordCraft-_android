@@ -42,7 +42,7 @@ fun TitleBar(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, actions: Edi
             Box {
                 IconButton({ panelsMenu = true }, Modifier.size(40.dp)) { Icon(Icons.Default.Dashboard, "Panels", Modifier.size(22.dp)) }
                 DropdownMenu(panelsMenu, { panelsMenu = false }) {
-                    PANELS.forEach { (id, name) ->
+                    PANELS.filter { it.first != "form" }.forEach { (id, name) ->
                         DropdownMenuItem(
                             text = { Text(name) },
                             leadingIcon = { if (id in ui.panels) Icon(Icons.Default.Check, null) },
@@ -59,7 +59,7 @@ fun TitleBar(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, actions: Edi
 }
 
 val PANELS = listOf(
-    "find" to "Find & Replace", "nav" to "Navigation", "styles" to "Styles", "format" to "Font",
+    "find" to "Find & Replace", "nav" to "Navigation", "styles" to "Styles", "borders" to "Borders and shading", "tableFormat" to "Format table", "pageBorders" to "Page borders", "toc" to "Table of contents", "format" to "Font",
     "review" to "Review", "comments" to "Comments", "clipboard" to "Clipboard", "info" to "Document info", "zoom" to "Zoom", "search" to "Tell me",
 )
 

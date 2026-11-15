@@ -15,6 +15,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -22,15 +23,22 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import org.wordcraft.android.ui.WordBlue
 import org.wordcraft.bridge.ObjRect
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.sin
 import kotlin.math.roundToInt
 
 private const val MIN_PT = 12f
 
 /**
- * Selection frame with eight resize handles over a selected picture or shape, as in Word. Corners keep
- * the proportions; edges stretch one side. Floating objects (any wrap but inline) can also be dragged.
- * The frame follows the finger and the engine is asked once, on release.
+ * Selection frame with eight resize handles over a selected picture or shape, as in Word.
+ *
+ * The frame turns with the object (`obj.degrees`, about its centre) and the handles stay on its
+ * corners. Dragging a handle resizes about the *opposite* handle, which stays put on the page even
+ * when the object is rotated: the frame is kept as centre + size, and the centre moves by half the
+ * size change, turned into page axes. Corners keep the proportions. Floating objects (any wrap but
+ * inline) can also be dragged. The engine is asked once, on release.
  */
 @Composable
 fun ObjectHandles(
@@ -38,64 +46,81 @@ fun ObjectHandles(
     pxPerPt: Float,
     onCommit: (x: Float, y: Float, w: Float, h: Float, moved: Boolean) -> Unit,
 ) {
-    var x by remember(obj) { mutableFloatStateOf(obj.x) }
-    var y by remember(obj) { mutableFloatStateOf(obj.y) }
+    val cx0 = obj.x + obj.w / 2f
+    val cy0 = obj.y + obj.h / 2f
+    var cx by remember(obj) { mutableFloatStateOf(cx0) }
+    var cy by remember(obj) { mutableFloatStateOf(cy0) }
     var w by remember(obj) { mutableFloatStateOf(obj.w) }
     var h by remember(obj) { mutableFloatStateOf(obj.h) }
-    var moved by remember(obj) { mutableStateOf(false) }
     val floating = obj.wrap != "inline" && obj.wrap.isNotEmpty()
     val aspect = if (obj.h > 0f) obj.w / obj.h else 1f
     val density = LocalDensity.current
     val handle = with(density) { 28.dp.toPx() }
+    val rad = Math.toRadians(obj.degrees.toDouble())
+    val cosT = cos(rad).toFloat()
+    val sinT = sin(rad).toFloat()
 
-    fun commit() { onCommit(x, y, w, h, moved) }
+    /** A vector in the object's own (turned) axes, in page axes. */
+    fun toPage(dx: Float, dy: Float) = Offset(dx * cosT - dy * sinT, dx * sinT + dy * cosT)
+
+    fun commit() {
+        val moved = floating && (abs(cx - cx0) > 0.01f || abs(cy - cy0) > 0.01f)
+        onCommit(cx - w / 2f, cy - h / 2f, w, h, moved)
+    }
 
     Box(
         Modifier
-            .offset { IntOffset((x * pxPerPt).roundToInt(), (y * pxPerPt).roundToInt()) }
+            .offset { IntOffset(((cx - w / 2f) * pxPerPt).roundToInt(), ((cy - h / 2f) * pxPerPt).roundToInt()) }
             .size(with(density) { (w * pxPerPt).toDp() }, with(density) { (h * pxPerPt).toDp() })
+            .graphicsLayer { rotationZ = obj.degrees } // about the centre, clockwise, like the engine
             .drawBehind {
                 drawRect(WordBlue, style = Stroke(2.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 8f))))
             }
             .then(
                 if (floating) Modifier.pointerInput(obj) {
                     detectDragGestures(onDragEnd = { commit() }) { c, d ->
-                        c.consume(); x += d.x / pxPerPt; y += d.y / pxPerPt; moved = true
+                        c.consume()
+                        val m = toPage(d.x / pxPerPt, d.y / pxPerPt)
+                        cx += m.x; cy += m.y
                     }
                 } else Modifier,
             ),
     ) {
         // (column, row) in {0, 1, 2}: 0 = low edge, 2 = high edge, 1 = middle.
-        listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1, 2 to 1, 0 to 2, 1 to 2, 2 to 2).forEach { (cx, cy) ->
+        listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1, 2 to 1, 0 to 2, 1 to 2, 2 to 2).forEach { (gx, gy) ->
             Box(
                 Modifier
                     .align(
                         when {
-                            cx == 0 && cy == 0 -> Alignment.TopStart; cx == 1 && cy == 0 -> Alignment.TopCenter; cx == 2 && cy == 0 -> Alignment.TopEnd
-                            cx == 0 && cy == 1 -> Alignment.CenterStart; cx == 2 && cy == 1 -> Alignment.CenterEnd
-                            cx == 0 && cy == 2 -> Alignment.BottomStart; cx == 1 && cy == 2 -> Alignment.BottomCenter
+                            gx == 0 && gy == 0 -> Alignment.TopStart; gx == 1 && gy == 0 -> Alignment.TopCenter; gx == 2 && gy == 0 -> Alignment.TopEnd
+                            gx == 0 && gy == 1 -> Alignment.CenterStart; gx == 2 && gy == 1 -> Alignment.CenterEnd
+                            gx == 0 && gy == 2 -> Alignment.BottomStart; gx == 1 && gy == 2 -> Alignment.BottomCenter
                             else -> Alignment.BottomEnd
                         },
                     )
-                    .offset { IntOffset(((cx - 1) * handle / 2f).roundToInt(), ((cy - 1) * handle / 2f).roundToInt()) }
+                    .offset { IntOffset(((gx - 1) * handle / 2f).roundToInt(), ((gy - 1) * handle / 2f).roundToInt()) }
                     .size(28.dp)
-                    .pointerInput(obj, cx, cy) {
+                    .pointerInput(obj, gx, gy) {
                         detectDragGestures(onDragEnd = { commit() }) { c, d ->
                             c.consume()
-                            val dx = d.x / pxPerPt; val dy = d.y / pxPerPt
-                            var nx = x; var ny = y; var nw = w; var nh = h
-                            if (cx == 2) nw += dx else if (cx == 0) { nx += dx; nw -= dx }
-                            if (cy == 2) nh += dy else if (cy == 0) { ny += dy; nh -= dy }
-                            if (cx != 1 && cy != 1) { // corner: keep the proportions, driven by the wider change
-                                nh = nw / aspect
-                                if (cy == 0) ny = y + h - nh
-                            }
-                            nw = max(MIN_PT, nw); nh = max(MIN_PT, nh)
-                            // Only a left/top drag moves the origin, and then only for floating objects.
-                            if (cx == 0) nx = x + w - nw
-                            if (cy == 0) ny = y + h - nh
-                            if (floating && (cx == 0 || cy == 0)) moved = true
-                            x = nx; y = ny; w = nw; h = nh
+                            // Drag in the object's own axes (the handle sits inside the turned frame).
+                            val dx = d.x / pxPerPt
+                            val dy = d.y / pxPerPt
+                            var dw = if (gx == 2) dx else if (gx == 0) -dx else 0f
+                            var dh = if (gy == 2) dy else if (gy == 0) -dy else 0f
+                            val corner = gx != 1 && gy != 1
+                            var nw = max(MIN_PT, w + dw)
+                            var nh = max(MIN_PT, h + dh)
+                            if (corner) nh = nw / aspect // keep the proportions
+                            if (nh < MIN_PT) { nh = MIN_PT; if (corner) nw = nh * aspect }
+                            dw = nw - w
+                            dh = nh - h
+                            // The dragged edges move by dw / dh; the centre moves half as far, toward them.
+                            val shift = toPage(
+                                if (gx == 2) dw / 2f else if (gx == 0) -dw / 2f else 0f,
+                                if (gy == 2) dh / 2f else if (gy == 0) -dh / 2f else 0f,
+                            )
+                            cx += shift.x; cy += shift.y; w = nw; h = nh
                         }
                     },
                 contentAlignment = Alignment.Center,

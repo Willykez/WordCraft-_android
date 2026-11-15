@@ -79,13 +79,18 @@ fun PanelHost(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, modifier: M
         val w = (maxWidth - 24.dp).coerceAtMost(320.dp)
         ui.panels.forEachIndexed { i, id ->
             key(id) {
-                val name = PANELS.firstOrNull { it.first == id }?.second ?: id
+                val name = if (id == "form") (ui.dialogCmd?.label ?: "Options") else PANELS.firstOrNull { it.first == id }?.second ?: id
                 val density = androidx.compose.ui.platform.LocalDensity.current
                 val start = with(density) { IntOffset(12.dp.roundToPx() + i * 28.dp.roundToPx(), 12.dp.roundToPx() + i * 36.dp.roundToPx()) }
                 FloatingPanel(name, bounds, start, w, onClose = { vm.closePanel(id) }, onFocus = { vm.openPanel(id) }) {
                     when (id) {
                         "find" -> FindContent(vm)
-                        "nav" -> NavContent(ui, vm)
+                        "nav" -> NavigationContent(ui, vm)
+                        "form" -> ui.dialogCmd?.let { FormContent(it, vm) }
+                        "borders" -> BordersContent(d)
+                        "pageBorders" -> PageBordersContent(d)
+                        "tableFormat" -> TableFormatContent(ui, d)
+                        "toc" -> TocContent(d)
                         "styles" -> StylesContent(ui, d)
                         "format" -> FormatContent(ui, d)
                         "review" -> ReviewContent(ui, vm)
@@ -129,46 +134,13 @@ private fun FindContent(vm: EditorViewModel) {
     }
 }
 
-@Composable
-private fun NavContent(ui: EditorUiState, vm: EditorViewModel) {
-    var heads by remember { mutableStateOf(listOf<Pair<Int, String>>()) }
-    val rev = ui.state?.revision
-    LaunchedEffect(rev) {
-        vm.query("file.inspect", "{\"text\":true}") { out ->
-            heads = runCatching {
-                val blocks = JSONObject(out).getJSONArray("blocks")
-                (0 until blocks.length()).map { blocks.getJSONObject(it) }.mapNotNull { b ->
-                    val style = b.optString("style")
-                    val level = Regex("^Heading ?(\\d)").find(style)?.groupValues?.get(1)?.toIntOrNull() ?: if (style == "Title") 1 else return@mapNotNull null
-                    val text = b.optString("text").trim()
-                    if (text.isEmpty()) null else level to text
-                }
-            }.getOrDefault(emptyList())
-        }
-    }
-    Text("${ui.pages.size} pages · ${ui.state?.wordCount ?: 0u} words", fontSize = 12.sp, color = Color.Gray)
-    Spacer(Modifier.height(6.dp))
-    if (heads.isEmpty()) Text("No headings yet. Apply a Heading style to build the outline.", fontSize = 13.sp)
-    heads.forEach { (level, text) ->
-        Text(
-            text, Modifier.fillMaxWidth().clickable { vm.run("select.text", mapOf("text" to text)) }.padding(start = ((level - 1) * 14).dp, top = 6.dp, bottom = 6.dp),
-            fontSize = 14.sp, maxLines = 2, fontWeight = if (level == 1) FontWeight.SemiBold else FontWeight.Normal,
-        )
-    }
-}
-
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun StylesContent(ui: EditorUiState, d: Dispatcher) {
-    val names = ui.styles.ifEmpty { listOf("Normal", "Heading 1", "Heading 2", "Heading 3") }
-    names.forEach { n ->
-        val on = ui.state?.styleName == n
-        Text(
-            n, Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (on) WordBlue.copy(alpha = 0.15f) else Color.Transparent)
-                .clickable { d.id("para.style", mapOf("style" to n)) }.padding(8.dp),
-            fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-        )
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        styleTiles(ui.styles).forEach { spec -> StyleTile(spec, styleMatches(ui.state?.styleName, spec), 92) { d.id("para.style", mapOf("style" to spec.id)) } }
     }
-    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton({ d.id("styles.create") }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("New style") }
         OutlinedButton({ d.id("styles.manage") }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Manage") }
     }

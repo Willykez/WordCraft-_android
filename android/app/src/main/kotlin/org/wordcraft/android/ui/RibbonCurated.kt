@@ -118,7 +118,6 @@ private val WATERMARKS = listOf("CONFIDENTIAL", "DRAFT", "DO NOT COPY", "SAMPLE"
 /** Design › Page Background: page colour, page borders and watermark, in the pickers Word uses. */
 @Composable
 internal fun DesignGroups(ui: EditorUiState, d: Dispatcher) {
-    var borders by remember { mutableStateOf(false) }
     var watermark by remember { mutableStateOf(false) }
     GroupBox("Page Background") {
         MenuBtn(
@@ -128,19 +127,7 @@ internal fun DesignGroups(ui: EditorUiState, d: Dispatcher) {
             ui.isEnabled("design.watermark"), cmd = ui.ribbon?.byId?.get("design.watermark"),
         )
         ColorMenuBtn("Page Color", ui) { c -> d.id("design.pageColor", mapOf("color" to if (c == "auto") org.json.JSONObject.NULL else c)) }
-        RBtn("Page borders", Icons.Default.BorderAll, ui.isEnabled("design.pageBorders")) { borders = true }
-    }
-    if (borders) PageBordersDialog({ borders = false }) { kind, style, width, color, applyTo ->
-        borders = false
-        val line = mapOf("style" to style, "width" to width, "color" to color)
-        d.id(
-            "design.pageBorders",
-            when (kind) {
-                "none" -> mapOf("kind" to "none", "applyTo" to applyTo)
-                "outside", "all" -> mapOf("kind" to "box", "style" to style, "width" to width, "color" to color, "applyTo" to applyTo)
-                else -> mapOf("sides" to mapOf(kind to line), "applyTo" to applyTo) // a single side
-            },
-        )
+        RBtn("Page borders", Icons.Default.BorderAll, ui.isEnabled("design.pageBorders")) { d.vm.openPanel("pageBorders") }
     }
     if (watermark) TextPromptDialog("Watermark", "Text", "CONFIDENTIAL", { watermark = false }) {
         watermark = false; d.id("design.watermark", mapOf("text" to it, "diagonal" to true, "color" to "C0C0C0"))

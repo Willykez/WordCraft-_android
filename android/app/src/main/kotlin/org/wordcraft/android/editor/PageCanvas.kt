@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.draw.shadow
@@ -79,6 +80,9 @@ fun PageCanvas(
     obj: org.wordcraft.bridge.ObjRect? = null,
     tableGeo: org.wordcraft.bridge.TableGeo? = null,
     ruler: org.wordcraft.bridge.RulerInfo? = null,
+    draw: DrawSettings? = null,
+    scrollToPage: Int? = null,
+    scrollTick: Int = 0,
 ) {
     val list = rememberLazyListState()
     val currentZoom by rememberUpdatedState(zoom)
@@ -112,6 +116,7 @@ fun PageCanvas(
         // dp per point so that zoom 1.0 fills the width with an 8dp gutter.
         val dpPerPt = (maxWidth.value - 16f) / maxWidthPt * zoom
         val horizontal = rememberScrollState()
+        LaunchedEffect(scrollTick) { scrollToPage?.let { list.animateScrollToItem(it.coerceIn(0, (pages.size - 1).coerceAtLeast(0))) } }
 
         // Keep the caret on screen as it moves: typing at the bottom, Enter, arrow keys, Find.
         val pxPerPtNow = with(LocalDensity.current) { dpPerPt.dp.toPx() }
@@ -142,7 +147,7 @@ fun PageCanvas(
         ) {
             itemsIndexed(pages, key = { i, _ -> i }) { index, page ->
                 PageItem(
-                    vm = vm, index = index, page = page, dpPerPt = dpPerPt, revision = revision, marks = marks, obj = obj?.takeIf { it.page.toInt() == index }, tableGeo = tableGeo?.takeIf { it.page.toInt() == index },
+                    vm = vm, index = index, page = page, dpPerPt = dpPerPt, revision = revision, marks = marks, obj = obj?.takeIf { it.page.toInt() == index }, tableGeo = tableGeo?.takeIf { it.page.toInt() == index }, draw = draw,
                     caret = caret?.takeIf { it.page.toInt() == index },
                     selection = selection.filter { it.page.toInt() == index },
                     allSelection = selection,
@@ -177,6 +182,7 @@ private fun PageItem(
     marks: Boolean,
     obj: org.wordcraft.bridge.ObjRect?,
     tableGeo: org.wordcraft.bridge.TableGeo?,
+    draw: DrawSettings?,
     caret: CaretRect?,
     selection: List<SelRect>,
     allSelection: List<SelRect>,
@@ -192,11 +198,16 @@ private fun PageItem(
     // Raster at the on-screen size, capped so a pinched-in page stays within memory.
     val rasterScale = (pxPerPt).coerceIn(0.5f, 3.2f)
     var bitmap by remember(index) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var live by remember { mutableStateOf<List<Offset>>(emptyList()) }
+    var committed by remember { mutableStateOf(false) }
     
     // Keep showing the previous bitmap until the new one is ready, so typing doesn't flicker.
     LaunchedEffect(revision, marks, index, (rasterScale * 20).roundToInt()) {
         vm.render(index, rasterScale)?.let { bitmap = it.asImageBitmap() }
+        if (committed) { live = emptyList(); committed = false } // the new stroke is in the page picture now
     }
+    // Safety net: never leave a drawn stroke hanging if the page picture is slow.
+    LaunchedEffect(committed) { if (committed) { kotlinx.coroutines.delay(2500); live = emptyList(); committed = false } }
 
     var lastDouble by remember { mutableLongStateOf(0L) }
     val blink = rememberInfiniteTransition(label = "caret").animateFloat(
@@ -209,39 +220,109 @@ private fun PageItem(
             .size(widthDp, heightDp)
             .shadow(4.dp, RectangleShape)
             .background(Color.White)
-            .pointerInput(index, pxPerPt) {
-                detectTapGestures(
-                    // A third quick tap right after a double tap selects the whole paragraph.
-                    onTap = { o ->
-                        if (System.currentTimeMillis() - lastDouble < 900) vm.selectParagraph(index, o.x / pxPerPt, o.y / pxPerPt)
-                        else vm.tap(index, o.x / pxPerPt, o.y / pxPerPt)
-                        onTapped()
-                    },
-                    onDoubleTap = { o -> lastDouble = System.currentTimeMillis(); vm.selectWord(index, o.x / pxPerPt, o.y / pxPerPt); onTapped() },
-                )
-            }
-            // Long-press selects a word, then dragging extends the selection from it.
-            .pointerInput(index, pxPerPt) {
-                var anchor = Offset.Zero
-                detectDragGesturesAfterLongPress(
-                    onDragStart = { o -> anchor = o; vm.selectWord(index, o.x / pxPerPt, o.y / pxPerPt); onTapped() },
-                    onDrag = { change, _ ->
-                        val p = change.position
-                        vm.selectBetween(index, anchor.x / pxPerPt, anchor.y / pxPerPt, index, p.x / pxPerPt, p.y / pxPerPt)
-                    },
-                )
-            },
+            .then(
+                if (draw == null) Modifier
+                    .pointerInput(index, pxPerPt) {
+                        detectTapGestures(
+                            // A third quick tap right after a double tap selects the whole paragraph.
+                            onTap = { o ->
+                                if (System.currentTimeMillis() - lastDouble < 900) vm.selectParagraph(index, o.x / pxPerPt, o.y / pxPerPt)
+                                else vm.tap(index, o.x / pxPerPt, o.y / pxPerPt)
+                                onTapped()
+                            },
+                            onDoubleTap = { o -> lastDouble = System.currentTimeMillis(); vm.selectWord(index, o.x / pxPerPt, o.y / pxPerPt); onTapped() },
+                        )
+                    }
+                    // Long-press selects a word, then dragging extends the selection from it.
+                    .pointerInput(index, pxPerPt) {
+                        var anchor = Offset.Zero
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { o -> anchor = o; vm.selectWord(index, o.x / pxPerPt, o.y / pxPerPt); onTapped() },
+                            onDrag = { change, _ ->
+                                val p = change.position
+                                vm.selectBetween(index, anchor.x / pxPerPt, anchor.y / pxPerPt, index, p.x / pxPerPt, p.y / pxPerPt)
+                            },
+                        )
+                    }
+                else Modifier.pointerInput(index, pxPerPt, draw) {
+                    // Ink: the finger or stylus draws instead of scrolling or placing the caret.
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        if (draw.stylusOnly && down.type != PointerType.Stylus) return@awaitEachGesture
+                        down.consume()
+                        val pts = ArrayList<Offset>().apply { add(down.position) }
+                        live = pts.toList()
+                        var lastErase = down.position
+                        if (draw.tool == "eraser") vm.eraseInk(index, down.position.x / pxPerPt, down.position.y / pxPerPt)
+                        while (true) {
+                            val ev = awaitPointerEvent()
+                            val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                            for (at in ch.historical.map { it.position } + ch.position) {
+                                val prev = pts.last()
+                                if ((at - prev).getDistance() >= 1.5f) pts.add(at)
+                                if (draw.tool == "eraser" && (at - lastErase).getDistance() >= 8f) {
+                                    lastErase = at; vm.eraseInk(index, at.x / pxPerPt, at.y / pxPerPt)
+                                }
+                            }
+                            live = if (draw.tool == "eraser") listOf(ch.position) else pts.toList()
+                            ch.consume()
+                            if (!ch.pressed) break
+                        }
+                        val all = pts.map { it.x / pxPerPt to it.y / pxPerPt }
+                        val step = if (all.size > 4000) all.size / 4000 + 1 else 1
+                        val sampled = all.filterIndexed { i, _ -> i % step == 0 || i == all.lastIndex }
+                        when (draw.tool) {
+                            "eraser" -> live = emptyList()
+                            "lasso" -> { if (sampled.size >= 3) vm.lassoInk(index, sampled); live = emptyList() }
+                            else -> {
+                                val line = if (sampled.size == 1) listOf(sampled[0], sampled[0].first + 0.1f to sampled[0].second) else sampled
+                                vm.drawStroke(index, line, draw.tool, draw.colorHex, draw.widthPt)
+                                committed = true
+                            }
+                        }
+                    }
+                },
+            ),
     ) {
         Canvas(Modifier.fillMaxSize()) {
             bitmap?.let { drawImage(it, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt())) }
-            selection.forEach {
+            // A selected picture/shape gets its own turned frame; the engine's flat selection box would be wrong for it.
+            if (obj == null) selection.forEach {
                 drawRect(
                     SelectionBlue, 
                     Offset(it.x.toFloat() * pxPerPt, it.y.toFloat() * pxPerPt), 
                     Size(it.w.toFloat() * pxPerPt, it.h.toFloat() * pxPerPt)
                 )
             }
-            if (selection.isEmpty() && caret != null) {
+            if (draw != null && live.isNotEmpty()) {
+                val color = Color(draw.color)
+                when (draw.tool) {
+                    "eraser" -> {
+                        drawCircle(Color(0x33000000), 14.dp.toPx(), live.last())
+                        drawCircle(Color(0x99000000), 14.dp.toPx(), live.last(), style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f))
+                    }
+                    "lasso" -> drawPath(
+                        androidx.compose.ui.graphics.Path().apply { moveTo(live[0].x, live[0].y); live.drop(1).forEach { lineTo(it.x, it.y) } },
+                        Color(0xFF2B579A),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            2.5f, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(14f, 9f)),
+                        ),
+                    )
+                    else -> {
+                        val w = draw.widthPt * pxPerPt
+                        val c = if (draw.tool == "highlighter") color.copy(alpha = 0.4f) else color
+                        if (live.size < 2) drawCircle(c, w / 2f, live[0])
+                        else drawPath(
+                            androidx.compose.ui.graphics.Path().apply { moveTo(live[0].x, live[0].y); live.drop(1).forEach { lineTo(it.x, it.y) } },
+                            c,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                w, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round,
+                            ),
+                        )
+                    }
+                }
+            }
+            if (selection.isEmpty() && caret != null && draw == null) {
                 drawRect(
                     Color.Black.copy(alpha = blink.value), 
                     Offset(caret.x.toFloat() * pxPerPt - 1f, caret.y.toFloat() * pxPerPt), 
@@ -301,4 +382,11 @@ private fun Handle(xPx: Float, yPx: Float, sizePx: Float, onDragTotal: (Float, F
             drawCircle(HandleBlue, radius = size.minDimension / 2.6f, center = Offset(size.width / 2, size.height / 2))
         }
     }
+}
+
+/** The active Draw tool as the page canvas needs it. */
+class DrawSettings(val tool: String, val colorHex: String, widthPt: Float, val stylusOnly: Boolean) {
+    val color: Long = 0xFF000000 or (colorHex.toLongOrNull(16) ?: 0L)
+    /** A highlighter is a broad marker: always at least 10 pt. */
+    val widthPt: Float = if (tool == "highlighter") maxOf(widthPt * 3f, 10f) else widthPt
 }

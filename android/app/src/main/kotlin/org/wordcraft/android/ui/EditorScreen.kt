@@ -37,6 +37,7 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
 
     LaunchedEffect(ui.message) { ui.message?.let { snackbar.showSnackbar(it); vm.dismissMessage() } }
     BackHandler(enabled = ui.backstage) { vm.showBackstage(false) }
+    BackHandler(enabled = ui.drawTool != null && !ui.backstage) { vm.setDrawTool(null) }
 
     Box(Modifier.fillMaxSize().background(RibbonBg)) {
         Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
@@ -47,6 +48,8 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
                 PageCanvas(
                     vm = vm, pages = ui.pages, caret = ui.caret, selection = ui.selection,
                     revision = st?.revision ?: 0uL, zoom = ui.zoom, onZoom = vm::setZoom, marks = st?.showMarks == true, obj = ui.obj, tableGeo = ui.tableGeo, ruler = ui.ruler,
+                    scrollToPage = ui.scrollToPage, scrollTick = ui.scrollTick,
+                    draw = ui.drawTool?.let { org.wordcraft.android.editor.DrawSettings(it, ui.drawColor, ui.drawWidth, ui.stylusOnly) },
                     onTapped = { typingReset++; runCatching { focus.requestFocus() }; keyboard?.show(); keyboardShown = true },
                 )
                 TypingSink(vm, focus, typingReset) { s ->
@@ -60,7 +63,8 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
                     Modifier.align(Alignment.TopCenter).padding(top = 8.dp, start = 8.dp, end = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    if (ui.obj != null) ObjectBar(ui, d, vm)
+                    if (ui.drawTool != null) DrawBar(ui, vm)
+                    else if (ui.obj != null) ObjectBar(ui, d, vm)
                     else {
                         ProofBar(ui, vm)
                         if (st?.hasSelection == true) MiniToolbar(ui, d)
@@ -68,6 +72,13 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
                     }
                 }
                 PanelHost(ui, vm, d, Modifier.fillMaxSize())
+                // While a header or footer is being edited, Word offers a way back to the body.
+                if ("insert.closeHeader" in ui.enabled) {
+                    FilledTonalButton(
+                        { d.id("insert.closeHeader") }, Modifier.align(Alignment.BottomCenter).padding(bottom = 56.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = WordBlue, contentColor = androidx.compose.ui.graphics.Color.White),
+                    ) { Text("Close header & footer") }
+                }
                 SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
             }
             StatusBar(ui, vm)
@@ -94,6 +105,5 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
             },
         )
     }
-    ui.dialogCmd?.let { c -> ParamDialog(c, onDismiss = vm::dismissDialog, onSubmit = { json -> vm.submit(c, json) }) }
     ui.result?.let { (title, text) -> ResultDialog(title, text, vm::dismissResult) }
 }

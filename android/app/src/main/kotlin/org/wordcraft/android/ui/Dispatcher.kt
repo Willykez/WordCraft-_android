@@ -13,7 +13,7 @@ val ContextAccent = Color(0xFFC55A11)
  * Routes a ribbon/menu command. Commands that need the Android side (file pickers, clipboard) or a
  * front-end surface (panes, zoom) are handled here; everything else goes to the engine.
  */
-class Dispatcher(private val vm: EditorViewModel, private val actions: EditorActions) {
+class Dispatcher(val vm: EditorViewModel, private val actions: EditorActions) {
     operator fun invoke(cmd: Cmd) {
         if (!special(cmd.id)) vm.exec(cmd)
     }
@@ -51,6 +51,10 @@ class Dispatcher(private val vm: EditorViewModel, private val actions: EditorAct
             "format.fontDialog" -> vm.openPanel("format")
             "review.changes", "review.issues" -> vm.openPanel("review")
             "tools.search" -> vm.openPanel("search")
+            "references.toc" -> vm.openPanel("toc")
+            "para.borders" -> vm.openPanel("borders")
+            "design.pageBorders" -> vm.openPanel("pageBorders")
+            "table.borders", "table.shading", "table.borderPainter" -> vm.openPanel("tableFormat")
             else -> return false
         }
         return true

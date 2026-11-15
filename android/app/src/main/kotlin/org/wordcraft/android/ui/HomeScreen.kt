@@ -113,7 +113,7 @@ fun HomeScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             Modifier.size(46.dp).clip(RoundedCornerShape(12.dp))
-                                .background(Brush.radialGradient(listOf(Color(0xFF0F4C8E), Color(0xFF051A3D)))),
+                                .background(Color.White),
                             contentAlignment = Alignment.Center,
                         ) {
                             Image(painterResource(R.drawable.wordcraft_logo), "WordCraft", Modifier.padding(5.dp))

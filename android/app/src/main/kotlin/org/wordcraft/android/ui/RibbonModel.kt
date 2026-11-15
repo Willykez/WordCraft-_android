@@ -47,9 +47,12 @@ val RIBBON_TABS = listOf("Home", "Insert", "Draw", "Design", "Layout", "Referenc
 /** Tabs that appear only while they apply (a table, a picture, a header, …). */
 val CONTEXT_TABS = listOf("Table Design", "Table Layout", "Picture Format", "Shape Format", "Equation", "Chart Design", "SmartArt Design", "Outlining", "Header & Footer")
 
-class RibbonModel(val all: List<Cmd>) {
+class RibbonModel(val all: List<Cmd>, catalog: List<Cmd> = emptyList()) {
     val byId: Map<String, Cmd> = all.associateBy { it.id }
-    private val byTab: Map<String, List<Cmd>> = all.groupBy { it.tab }
+
+    /** What the ribbon shows: Word's own tabs, groups and wording when the engine provides them. */
+    private val shown: List<Cmd> = catalog.ifEmpty { all }
+    private val byTab: Map<String, List<Cmd>> = shown.groupBy { it.tab }
 
     val tabs: List<String> = RIBBON_TABS.filter { byTab.containsKey(it) || it == "Home" }
     val contextTabs: List<String> = CONTEXT_TABS.filter { byTab.containsKey(it) }
@@ -59,16 +62,19 @@ class RibbonModel(val all: List<Cmd>) {
 
     /** Every id whose enabled state the ribbon needs for `tab`, plus the contextual tabs' (to know which to show). */
     fun watchedIds(tab: String): List<String> =
-        (tabCmds(tab) + contextTabs.flatMap { tabCmds(it) }).map { it.id }.distinct()
+        (tabCmds(tab) + contextTabs.flatMap { tabCmds(it) }).map { it.id }.plus("insert.closeHeader").distinct()
 
     companion object {
-        fun parse(json: String): RibbonModel {
+        fun parse(json: String, catalog: List<org.wordcraft.bridge.CatalogItem> = emptyList()): RibbonModel {
             val arr = JSONArray(json)
             val list = (0 until arr.length()).map { i ->
                 val o = arr.getJSONObject(i)
                 Cmd(o.getString("id"), o.optString("label"), o.optString("location"), o.optString("shortcut"), o.optString("params"), o.optBoolean("mutates", true))
             }
-            return RibbonModel(list)
+            val byId = list.associateBy { it.id }
+            // Word's catalogue entries become ribbon buttons: its label and its tab › group.
+            val cat = catalog.mapNotNull { c -> byId[c.id]?.copy(label = c.label, location = "${c.tab} › ${c.group}") }
+            return RibbonModel(list, cat)
         }
     }
 }

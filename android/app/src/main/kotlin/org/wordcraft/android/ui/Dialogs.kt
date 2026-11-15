@@ -25,7 +25,7 @@ import org.wordcraft.android.editor.EditorUiState
 import org.wordcraft.android.editor.EditorViewModel
 import kotlin.math.abs
 
-private fun buildJson(cmd: Cmd, values: Map<String, String>): String {
+internal fun buildJson(cmd: Cmd, values: Map<String, String>): String {
     val o = JSONObject()
     for (f in cmd.fields) {
         val v = values[f.name]?.trim().orEmpty()

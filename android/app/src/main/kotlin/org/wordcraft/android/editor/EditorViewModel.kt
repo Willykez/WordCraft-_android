@@ -23,7 +23,9 @@ import org.wordcraft.android.data.Recovery
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import org.wordcraft.android.ui.Cmd
+import org.wordcraft.bridge.HeadingItem
 import org.wordcraft.bridge.ObjRect
+import org.wordcraft.bridge.SearchHit
 import org.wordcraft.bridge.RulerInfo
 import org.wordcraft.bridge.TableGeo
 import org.wordcraft.android.ui.RibbonModel
@@ -75,6 +77,17 @@ data class EditorUiState(
     /** Indents and tab stops of the caret's paragraph. */
     val ruler: RulerInfo? = null,
     val showRuler: Boolean = true,
+    /** Active Draw tool: `pen`, `pencil`, `highlighter`, `eraser` or `lasso`; null = typing. */
+    val drawTool: String? = null,
+    val drawColor: String = "000000",
+    val drawWidth: Float = 2.5f,
+    /** Only a stylus draws; fingers keep scrolling. */
+    val stylusOnly: Boolean = false,
+    /** Ink strokes inside the current lasso. */
+    val lassoCount: Int = 0,
+    /** Ask the canvas to scroll to this page (Navigation › Pages); `scrollTick` makes repeats count. */
+    val scrollToPage: Int? = null,
+    val scrollTick: Int = 0,
 ) {
     fun isEnabled(id: String) = id !in watched || id in enabled
 }
@@ -202,7 +215,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private fun install(s: MobileSession, uri: Uri?, name: String) {
         session = s; sourceUri = uri; sourceName = name; pageCache.evictAll(); unsavedRecovered = false; closeAfterSave = false
         _ui.update { EditorUiState(open = true, tab = it.tab, ribbonExpanded = it.ribbonExpanded, showRuler = it.showRuler, zoom = 1f) }
-        if (ribbon == null) ribbon = runCatching { RibbonModel.parse(s.commandsJson()) }.getOrNull()
+        if (ribbon == null) ribbon = runCatching { RibbonModel.parse(s.commandsJson(), runCatching { s.ribbonCatalog() }.getOrDefault(emptyList())) }.getOrNull()
         watched = ribbon?.watchedIds(_ui.value.tab).orEmpty()
         refresh()
         loadStyles()
@@ -289,7 +302,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     /** A ribbon command: ask for its inputs first when it has required ones. */
     fun exec(cmd: Cmd) {
-        if (cmd.needsInput) { _ui.update { it.copy(dialogCmd = cmd) }; return }
+        if (cmd.needsInput) { _ui.update { it.copy(dialogCmd = cmd, panels = it.panels.filter { p -> p != "form" } + "form") }; return }
         runJson(cmd.id, "") { out -> showResult(cmd, out) }
     }
 
@@ -399,13 +412,59 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         launchEngine { refresh() }
     }
     fun toggleRuler() { _ui.update { it.copy(showRuler = !it.showRuler) }; launchEngine { refresh() } }
+    fun setDrawTool(t: String?) {
+        _ui.update { it.copy(drawTool = t, lassoCount = 0) }
+        if (t != "lasso") tryRun("draw.lasso", mapOf("clear" to true))
+    }
+    fun setDrawColor(hex: String) = _ui.update { it.copy(drawColor = hex) }
+    fun setDrawWidth(w: Float) = _ui.update { it.copy(drawWidth = w) }
+    fun toggleStylusOnly() = _ui.update { it.copy(stylusOnly = !it.stylusOnly) }
+
+    /** A command whose failure doesn't matter to the user (erasing where there is no ink). */
+    fun tryRun(command: String, params: Map<String, Any?>) = launchEngine {
+        runCatching { session?.execute(command, JSONObject(params).toString()); refresh() }
+    }
+
+    /** One finished ink stroke, in page points. */
+    fun drawStroke(page: Int, points: List<Pair<Float, Float>>, tool: String, colorHex: String, widthPt: Float) =
+        run("draw.stroke", mapOf("page" to page, "points" to points.map { listOf(it.first, it.second) }, "tool" to tool, "color" to colorHex, "width" to widthPt))
+
+    fun eraseInk(page: Int, x: Float, y: Float) = tryRun("draw.erase", mapOf("page" to page, "x" to x, "y" to y))
+
+    fun lassoInk(page: Int, points: List<Pair<Float, Float>>) =
+        runJson("draw.lasso", JSONObject(mapOf("page" to page, "points" to points.map { listOf(it.first, it.second) })).toString()) { out ->
+            val n = runCatching { JSONObject(out).optJSONArray("selected")?.length() ?: JSONObject(out).optInt("count") }.getOrDefault(0)
+            _ui.update { it.copy(lassoCount = n) }
+        }
+
+    fun lassoDelete() { run("draw.lassoDelete"); _ui.update { it.copy(lassoCount = 0) } }
+    fun lassoClear() { tryRun("draw.lasso", mapOf("clear" to true)); _ui.update { it.copy(lassoCount = 0) } }
+
+    // ---- Navigation pane data -------------------------------------------------------------------
+
+    fun loadHeadings(onResult: (List<HeadingItem>) -> Unit) = launchEngine {
+        val h = runCatching { session?.headings() }.getOrNull().orEmpty()
+        withContext(Dispatchers.Main) { onResult(h) }
+    }
+
+    fun searchText(query: String, matchCase: Boolean, wholeWord: Boolean, onResult: (List<SearchHit>) -> Unit) = launchEngine {
+        val hits = runCatching { session?.searchText(query, matchCase, wholeWord, 300u) }.getOrNull().orEmpty()
+        withContext(Dispatchers.Main) { onResult(hits) }
+    }
+
+    /** Select from `start` to `end` (both `Pos` JSON); the page scrolls to the caret by itself. */
+    fun jumpTo(start: String, end: String = start) =
+        runJson("select.range", JSONObject().put("anchor", JSONObject(start)).put("focus", JSONObject(end)).toString())
+
+    fun goToPage(i: Int) = _ui.update { it.copy(scrollToPage = i, scrollTick = it.scrollTick + 1) }
+
     fun toggleRibbon() = _ui.update { it.copy(ribbonExpanded = !it.ribbonExpanded) }
     fun setZoom(z: Float) = _ui.update { it.copy(zoom = z.coerceIn(0.5f, 4f)) }
     fun openPanel(id: String) = _ui.update { it.copy(panels = it.panels.filter { p -> p != id } + id) }
-    fun closePanel(id: String) = _ui.update { it.copy(panels = it.panels.filter { p -> p != id }) }
+    fun closePanel(id: String) = _ui.update { it.copy(panels = it.panels.filter { p -> p != id }, dialogCmd = if (id == "form") null else it.dialogCmd) }
     fun togglePanel(id: String) = if (id in _ui.value.panels) closePanel(id) else openPanel(id)
     fun showBackstage(show: Boolean) = _ui.update { it.copy(backstage = show) }
-    fun dismissDialog() = _ui.update { it.copy(dialogCmd = null) }
+    fun dismissDialog() = _ui.update { it.copy(dialogCmd = null, panels = it.panels.filter { p -> p != "form" }) }
     fun dismissResult() = _ui.update { it.copy(result = null) }
     fun dismissMessage() = _ui.update { it.copy(message = null) }
     fun dismissPassword() = _ui.update { it.copy(needsPassword = false) }
