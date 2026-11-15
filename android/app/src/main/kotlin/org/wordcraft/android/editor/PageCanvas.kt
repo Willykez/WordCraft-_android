@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -65,6 +66,7 @@ private val HandleBlue = Color(0xFF2F6BFF)
  * Zoom 1.0 fits the widest page to the screen width. Pinch (two fingers) changes it; one finger
  * keeps scrolling the list.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PageCanvas(
     vm: EditorViewModel,
