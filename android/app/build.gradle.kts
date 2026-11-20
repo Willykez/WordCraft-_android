@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -18,9 +20,10 @@ data class ReleaseSigning(val storeFile: File, val storePassword: String, val ke
 
 val keystorePropsFile = rootProject.layout.projectDirectory.file("keystore.properties").asFile
 val releaseSigning: ReleaseSigning? = if (keystorePropsFile.exists()) {
-    val props = java.util.Properties().apply { keystorePropsFile.inputStream().use { load(it) } }
-    fun need(k: String) = props.getProperty(k) ?: throw GradleException("keystore.properties is missing \"$k\"")
-    ReleaseSigning(rootProject.layout.projectDirectory.file(need("storeFile")).asFile, need("storePassword"), need("keyAlias"), need("keyPassword"))
+    val props = Properties().apply { keystorePropsFile.inputStream().use { load(it) } }
+    fun need(k: String): String = props.getProperty(k) ?: throw GradleException("keystore.properties is missing \"$k\"")
+    val storeFilePath: String = need("storeFile")
+    ReleaseSigning(rootProject.layout.projectDirectory.file(storeFilePath).asFile, need("storePassword"), need("keyAlias"), need("keyPassword"))
 } else {
     val storeFilePath = System.getenv("WORDCRAFT_KEYSTORE_FILE")
     val storePassword = System.getenv("WORDCRAFT_KEYSTORE_PASSWORD")
