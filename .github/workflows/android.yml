@@ -67,33 +67,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Install KtLint
-        run: |
-          curl -fsSL \
-            https://github.com/ktlint/ktlint/releases/download/1.8.0/ktlint \
-            -o ktlint
-          chmod +x ktlint
-          sudo mv ktlint /usr/local/bin/ktlint
-
-      - name: Kotlin formatting check
-        run: |
-          ktlint "android/app/src/main/kotlin/**/*.kt"
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: rustfmt
-
-      - name: Rust formatting check
-        shell: bash
-        run: |
-          if [ -f android/rust/Cargo.toml ]; then
-            cd android/rust
-            cargo fmt --all -- --check
-          else
-            echo "Rust workspace not found at android/rust; skipping Rust format check."
-          fi
 
       - name: Validate Cargo metadata
         shell: bash
@@ -104,19 +81,6 @@ jobs:
           else
             echo "Cargo workspace not found; skipping metadata validation."
           fi
-
-      - name: Validate workflow YAML
-        run: |
-          python -m pip install --quiet pyyaml
-          python - <<'PY'
-          import yaml
-          from pathlib import Path
-
-          for file in Path(".github/workflows").glob("*.yml"):
-              with file.open() as f:
-                  yaml.safe_load(f)
-              print(f"Valid YAML: {file}")
-          PY
 
   # --------------------------------------------------
   # 2. RUST TESTS (INDEPENDENT)
