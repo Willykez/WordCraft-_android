@@ -61,12 +61,12 @@ fun PillRow(items: List<Pair<String, String>>, selected: String?, onPick: (Strin
 }
 
 private val SHADES = listOf("FFFFFF", "F2F2F2", "D9D9D9", "FFF2CC", "FCE4D6", "E2EFDA", "DDEBF7", "E4DFEC", "FFFF00", "BDD7EE", "C6E0B4")
-private val LINE_COLORS = listOf("000000", "595959", "A6A6A6", "C00000", "ED7D31", "FFC000", "548235", "00B0F0", "185ABD", "7030A0")
+private val PANEL_LINE_COLORS = listOf("000000", "595959", "A6A6A6", "C00000", "ED7D31", "FFC000", "548235", "00B0F0", "185ABD", "7030A0")
 
 private fun col(hex: String) = Color(0xFF000000 or hex.toLong(16))
 
 @Composable
-fun SwatchRow(colors: List<String>, selected: String?, onPick: (String) -> Unit) {
+private fun PanelSwatchRow(colors: List<String>, selected: String?, onPick: (String) -> Unit) {
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         colors.forEach { c ->
             Box(
@@ -86,7 +86,7 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
 }
 
 @Composable
-private fun PrimaryButton(label: String, enabled: Boolean = true, onClick: () -> Unit) =
+private fun PanelPrimaryButton(label: String, enabled: Boolean = true, onClick: () -> Unit) =
     Button(onClick, Modifier.fillMaxWidth(), enabled = enabled, shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = WordBlue)) { Text(label) }
 
 /** "pageNumbers" → "Page numbers". */
@@ -113,7 +113,7 @@ internal fun FormContent(cmd: Cmd, vm: EditorViewModel) {
             }
             f.options.isNotEmpty() -> Section(label) { PillRow(f.options.map { humanize(it) to it }, values[f.name]) { values[f.name] = it } }
             isColor -> Section(label) {
-                SwatchRow(LINE_COLORS + SHADES.drop(8), values[f.name]) { values[f.name] = it }
+                PanelSwatchRow(PANEL_LINE_COLORS + SHADES.drop(8), values[f.name]) { values[f.name] = it }
                 OutlinedTextField(
                     values[f.name].orEmpty(), { values[f.name] = it.removePrefix("#").take(6) }, Modifier.fillMaxWidth(), singleLine = true,
                     placeholder = { Text("Hex colour, e.g. 185ABD") },
@@ -128,7 +128,7 @@ internal fun FormContent(cmd: Cmd, vm: EditorViewModel) {
         }
     }
     Spacer(Modifier.height(4.dp))
-    PrimaryButton("Apply", !missing) { vm.submit(cmd, buildJson(cmd, values)) }
+    PanelPrimaryButton("Apply", !missing) { vm.submit(cmd, buildJson(cmd, values)) }
 }
 
 // ---------------------------------------------------------------------------------------------
