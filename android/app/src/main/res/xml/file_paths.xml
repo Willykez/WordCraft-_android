@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Lets WordCraft hand a document it found on storage (for example a PDF) to another app to view. -->
+    <root-path name="root" path="." />
+</paths>

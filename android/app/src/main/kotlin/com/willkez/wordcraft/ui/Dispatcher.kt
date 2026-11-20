@@ -1,13 +1,86 @@
 package com.willkez.wordcraft.ui
 
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import com.willkez.wordcraft.editor.EditorViewModel
 
-val WordBlue = Color(0xFF2B579A)
-val WordBlueDark = Color(0xFF1E3F73)
+/** The app theme: one accent (title bar, buttons, headers) chosen by the user; document colours are separate. */
+object AppTheme {
+    class Spec(val name: String, val primary: Color, val dark: Color, val gradient: List<Color>)
+    val specs = listOf(
+        Spec("Ocean", Color(0xFF2B579A), Color(0xFF1E3F73), listOf(Color(0xFF2B579A), Color(0xFF3949AB), Color(0xFF8E24AA), Color(0xFFD81B60))),
+        Spec("Forest", Color(0xFF2E7D32), Color(0xFF1B5E20), listOf(Color(0xFF2E7D32), Color(0xFF00897B), Color(0xFF00838F), Color(0xFF2B579A))),
+        Spec("Sunset", Color(0xFFE65100), Color(0xFFBF360C), listOf(Color(0xFFEF6C00), Color(0xFFC62828), Color(0xFFD81B60), Color(0xFF8E24AA))),
+        Spec("Berry", Color(0xFFAD1457), Color(0xFF880E4F), listOf(Color(0xFFD81B60), Color(0xFF8E24AA), Color(0xFF3949AB), Color(0xFF2B579A))),
+        Spec("Lagoon", Color(0xFF00796B), Color(0xFF004D40), listOf(Color(0xFF00897B), Color(0xFF00838F), Color(0xFF2B579A), Color(0xFF3949AB))),
+        Spec("Slate", Color(0xFF455A64), Color(0xFF263238), listOf(Color(0xFF455A64), Color(0xFF3949AB), Color(0xFF2B579A), Color(0xFF00897B))),
+    )
+    var index by mutableIntStateOf(0)
+    val current: Spec get() = specs[index.coerceIn(specs.indices)]
+}
+val WordBlue: Color get() = AppTheme.current.primary
+val WordBlueDark: Color get() = AppTheme.current.dark
+val ThemeGradient: List<Color> get() = AppTheme.current.gradient
 val RibbonBg = Color(0xFFF3F3F3)
 val RibbonInk = Color(0xFF222222)
 val ContextAccent = Color(0xFFC55A11)
+
+// ---- Rich palette: every tab, group, screen and file type gets its own colour ------------------
+val PaletteBlue = Color(0xFF2B579A)
+val PaletteTeal = Color(0xFF00897B)
+val PalettePurple = Color(0xFF8E24AA)
+val PalettePink = Color(0xFFD81B60)
+val PaletteOrange = Color(0xFFEF6C00)
+val PaletteGreen = Color(0xFF2E7D32)
+val PaletteIndigo = Color(0xFF3949AB)
+val PaletteCrimson = Color(0xFFC62828)
+val PaletteCyan = Color(0xFF00838F)
+val PaletteAmber = Color(0xFFF9A825)
+val Palette = listOf(PaletteBlue, PaletteTeal, PalettePurple, PalettePink, PaletteOrange, PaletteGreen, PaletteIndigo, PaletteCrimson, PaletteCyan, PaletteAmber)
+
+/** The colour a ribbon tab (and everything inside it) is drawn in. */
+fun tabColor(tab: String): Color = when (tab) {
+    "Home" -> PaletteBlue
+    "Insert" -> PaletteTeal
+    "Draw" -> PalettePurple
+    "Design" -> PalettePink
+    "Layout" -> PaletteOrange
+    "References" -> PaletteGreen
+    "Mailings" -> PaletteIndigo
+    "Review" -> PaletteCrimson
+    "View" -> PaletteCyan
+    "Table Design", "Table Layout", "Picture Format" -> ContextAccent
+    else -> Palette[(tab.hashCode() and 0x7fffffff) % Palette.size]
+}
+
+/** A pale wash of `c` (0 = white, 1 = full colour), for backgrounds that should still read as that colour. */
+fun tint(c: Color, amount: Float = 0.12f): Color = lerp(Color.White, c, amount)
+
+/** The accent of the ribbon tab being drawn; group titles, dividers and toggles pick it up. */
+val LocalAccent = compositionLocalOf { WordBlue }
+
+/** Workspace behind the pages: a soft multi-colour wash instead of flat grey. */
+val WorkspaceBrush: Brush = Brush.linearGradient(
+    listOf(Color(0xFFBBD7FF), Color(0xFFD9C8FF), Color(0xFFFFC9E0), Color(0xFFFFE0B8)),
+)
+
+/** Colour and short label for a document type (home screen, recent list, explorer). */
+fun typeStyle(ext: String): Pair<Color, String> = when (ext.lowercase()) {
+    "pdf" -> PaletteCrimson to "PDF"
+    "txt" -> Color(0xFF546E7A) to "TXT"
+    "md" -> PaletteIndigo to "MD"
+    "odt" -> PaletteTeal to "ODT"
+    "html", "htm" -> PaletteOrange to "HTM"
+    "rtf" -> PalettePurple to "RTF"
+    "doc" -> PaletteCyan to "DOC"
+    "docm", "dotx" -> PalettePink to "DOC"
+    else -> PaletteBlue to "DOCX"
+}
 
 /**
  * Routes a ribbon/menu command. Commands that need the Android side (file pickers, clipboard) or a

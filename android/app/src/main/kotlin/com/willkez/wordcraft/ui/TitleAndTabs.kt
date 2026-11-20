@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,8 +28,13 @@ import com.willkez.wordcraft.editor.EditorViewModel
 fun TitleBar(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, actions: EditorActions) {
     val st = ui.state
     var panelsMenu by remember { mutableStateOf(false) }
-    Surface(color = WordBlue, contentColor = Color.White) {
-        Row(Modifier.fillMaxWidth().statusBarsPadding().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+    Surface(color = Color.Transparent, contentColor = Color.White) {
+        Row(
+            Modifier.fillMaxWidth()
+                .background(Brush.horizontalGradient(ThemeGradient))
+                .statusBarsPadding().height(48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             IconButton(actions::close) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close document") }
             IconButton(actions::save, Modifier.size(40.dp)) { Icon(Icons.Default.Save, "Save", Modifier.size(22.dp)) }
             IconButton(vm::undo, Modifier.size(40.dp), enabled = st?.canUndo == true) { Icon(Icons.Default.Undo, "Undo", Modifier.size(22.dp)) }
@@ -68,10 +74,10 @@ val PANELS = listOf(
 fun RibbonTabs(ui: EditorUiState, tab: String, contextTabs: List<String>, vm: EditorViewModel) {
     val model = ui.ribbon
     val tabs = model?.tabs ?: listOf("Home")
-    Row(Modifier.fillMaxWidth().background(WordBlue).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.Bottom) {
-        TabLabel("File", selected = false, color = WordBlueDark) { vm.showBackstage(true) }
-        tabs.forEach { t -> TabLabel(t, selected = tab == t && ui.ribbonExpanded, color = WordBlue) { vm.setTab(t) } }
-        contextTabs.forEach { t -> TabLabel(t, selected = tab == t && ui.ribbonExpanded, color = ContextAccent) { vm.setTab(t) } }
+    Row(Modifier.fillMaxWidth().background(WordBlueDark).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.Bottom) {
+        TabLabel("File", selected = false, color = WordBlue) { vm.showBackstage(true) }
+        tabs.forEach { t -> TabLabel(t, selected = tab == t && ui.ribbonExpanded, color = tabColor(t)) { vm.setTab(t) } }
+        contextTabs.forEach { t -> TabLabel(t, selected = tab == t && ui.ribbonExpanded, color = tabColor(t)) { vm.setTab(t) } }
     }
 }
 
@@ -79,10 +85,10 @@ fun RibbonTabs(ui: EditorUiState, tab: String, contextTabs: List<String>, vm: Ed
 private fun TabLabel(text: String, selected: Boolean, color: Color, onClick: () -> Unit) {
     Box(
         Modifier.clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-            .background(if (selected) RibbonBg else color)
+            .background(if (selected) tint(color) else color)
             .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 9.dp),
     ) {
-        Text(text, fontSize = 13.sp, maxLines = 1, color = if (selected) color.takeIf { it != WordBlueDark } ?: WordBlue else Color.White,
+        Text(text, fontSize = 13.sp, maxLines = 1, color = if (selected) color else Color.White,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -61,7 +62,6 @@ import com.willkez.wordcraft.bridge.CaretRect
 import com.willkez.wordcraft.bridge.PageInfo
 import com.willkez.wordcraft.bridge.SelRect
 
-private val PaperGrey = Color(0xFFE3E5E8)
 private val SelectionBlue = Color(0x553D7BFF)
 private val HandleBlue = Color(0xFF2F6BFF)
 
@@ -95,7 +95,7 @@ fun PageCanvas(
     BoxWithConstraints(
         modifier
             .fillMaxSize()
-            .background(PaperGrey)
+            .background(com.willkez.wordcraft.ui.WorkspaceBrush)
             .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown(
@@ -153,7 +153,7 @@ fun PageCanvas(
             72.dp.toPx()
         }
 
-        LaunchedEffect(caret?.page, caret?.y, caret?.height) {
+        LaunchedEffect(caret?.page, caret?.y, caret?.height, list.layoutInfo.viewportEndOffset) {
             val c = caret ?: return@LaunchedEffect
             val pageIndex = c.page.toInt()
 
@@ -181,7 +181,8 @@ fun PageCanvas(
             }
 
             if (delta != 0f) {
-                list.animateScrollBy(delta)
+                // Typing nudges the page a line at a time: move at once so the caret never lags behind the keys.
+                if (kotlin.math.abs(delta) < 360f) list.scrollBy(delta) else list.animateScrollBy(delta)
             }
         }
 

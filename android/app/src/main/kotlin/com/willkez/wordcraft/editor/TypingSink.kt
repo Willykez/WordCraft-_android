@@ -35,6 +35,23 @@ private val PAD = SENTINEL.repeat(PAD_LEN)
 private fun fresh() = TextFieldValue(PAD, TextRange(PAD_LEN))
 
 /**
+ * What was just typed, so the first letter of a sentence can be capitalised. `tail` is null when the text before the
+ * caret is unknown (the caret was just moved by touch); then only an empty document counts as a sentence start.
+ */
+private class TypedContext {
+    var tail: String? = null
+    private val sentenceEnd = Regex("[.!?…][\"')\\]]*\\s+\$")
+
+    fun atSentenceStart(documentEmpty: Boolean): Boolean {
+        val t = tail ?: return documentEmpty
+        return t.endsWith("\n") || sentenceEnd.containsMatchIn(t)
+    }
+
+    fun typed(text: String) { tail = ((tail ?: "") + text).takeLast(8) }
+    fun deleted(count: Int) { tail = tail?.dropLast(count)?.ifEmpty { null } }
+}
+
+/**
  * An invisible text field that owns the soft keyboard. The engine, not Android, owns the document,
  * so every change to the field is turned into engine commands by comparing it with its previous
  * text: removed characters are Backspaces, new characters are typing.
@@ -45,9 +62,10 @@ private fun fresh() = TextFieldValue(PAD, TextRange(PAD_LEN))
  * or when the buffer is nearly used up.
  */
 @Composable
-fun TypingSink(vm: EditorViewModel, focus: FocusRequester, resetTick: Int = 0, onShortcut: (String) -> Unit) {
+fun TypingSink(vm: EditorViewModel, focus: FocusRequester, resetTick: Int = 0, autoCapitalize: Boolean = true, onShortcut: (String) -> Unit) {
     var value by remember { mutableStateOf(fresh()) }
-    LaunchedEffect(resetTick) { value = fresh() }
+    val typedContext = remember { TypedContext() }
+    LaunchedEffect(resetTick) { value = fresh(); typedContext.tail = null }
     BasicTextField(
         value = value,
         onValueChange = { nv ->
@@ -62,8 +80,13 @@ fun TypingSink(vm: EditorViewModel, focus: FocusRequester, resetTick: Int = 0, o
             while (q < maxQ && old[old.length - 1 - q] == new[new.length - 1 - q]) q++
             val deleted = old.length - p - q
             val inserted = new.substring(p, new.length - q).replace(SENTINEL, "")
-            repeat(deleted) { vm.backspace() }
-            if (inserted.isNotEmpty()) vm.typeText(inserted)
+            if (deleted > 0) { vm.backspace(deleted); typedContext.deleted(deleted) }
+            if (inserted.isNotEmpty()) {
+                // A single lower-case letter at the start of a sentence is capitalised; words from suggestions are left alone.
+                val text = if (autoCapitalize && inserted.length == 1 && inserted[0].isLowerCase() && typedContext.atSentenceStart(vm.ui.value.state?.wordCount == 0uL)) inserted.uppercase() else inserted
+                vm.typeText(text)
+                typedContext.typed(text)
+            }
             // Keep the field as the keyboard left it; start over only when the padding has run out or it grew large.
             val padLeft = new.takeWhile { it.toString() == SENTINEL }.length
             value = if (new.length > MAX_LEN || padLeft < 4) fresh() else nv
@@ -91,9 +114,9 @@ fun TypingSink(vm: EditorViewModel, focus: FocusRequester, resetTick: Int = 0, o
                         Key.F -> onShortcut("find")
                         else -> return@onPreviewKeyEvent false
                     }
-                    e.key == Key.Enter || e.key == Key.NumPadEnter -> vm.run("text.newParagraph")
-                    e.key == Key.Backspace -> vm.run(if (e.isCtrlPressed) "text.deleteWordBack" else "text.backspace")
-                    e.key == Key.Delete -> vm.run("text.delete")
+                    e.key == Key.Enter || e.key == Key.NumPadEnter -> { vm.run("text.newParagraph"); typedContext.typed("\n") }
+                    e.key == Key.Backspace -> if (e.isCtrlPressed) vm.run("text.deleteWordBack") else { vm.backspace(); typedContext.deleted(1) }
+                    e.key == Key.Delete -> vm.deleteForward()
                     e.key == Key.Tab -> vm.run(if (e.isShiftPressed) "text.backTab" else "text.tab")
                     e.key == Key.DirectionLeft -> vm.run("caret.left", extend)
                     e.key == Key.DirectionRight -> vm.run("caret.right", extend)

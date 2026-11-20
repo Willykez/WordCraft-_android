@@ -105,8 +105,11 @@ pub(crate) struct ColumnLines {
 
 /// Page borders, measured from the page edge (Word's default), so they surround the header,
 /// footer and line numbers. The first items of every printed page.
-pub(crate) fn page_border_rules(s: &SectionProps) -> Vec<Placed> {
+pub(crate) fn page_border_rules(s: &SectionProps, first_in_section: bool) -> Vec<Placed> {
     let mut v = Vec::new();
+    if !s.page_border_display.shows(first_in_section) {
+        return v;
+    }
     if let Some(b) = &s.page_borders {
         let sp = |e: &Option<Border>| e.map(|x| x.space).unwrap_or(24.0);
         let (x0, x1, y0, y1) = (sp(&b.left), s.page_w - sp(&b.right), sp(&b.top), s.page_h - sp(&b.bottom));
@@ -325,7 +328,8 @@ impl PageBuilder<'_> {
         let body = Rect::new(s.margin_left + s.gutter, body_top, s.text_width(), (bottom - body_top).max(36.0));
         let mut decor = Vec::new();
         if !self.web {
-            decor = page_border_rules(s);
+            let first_in_section = self.pages.last().is_none_or(|p| p.section != self.sect_idx);
+            decor = page_border_rules(s, first_in_section);
         }
         self.page_items_start = decor.len();
         self.block_marks.clear();

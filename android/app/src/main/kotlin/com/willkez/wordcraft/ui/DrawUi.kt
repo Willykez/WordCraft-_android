@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
@@ -25,10 +26,27 @@ import androidx.compose.ui.unit.sp
 import com.willkez.wordcraft.editor.EditorUiState
 import com.willkez.wordcraft.editor.EditorViewModel
 
-internal val INK_COLORS = listOf("000000", "C00000", "ED7D31", "FFC000", "548235", "00B0F0", "185ABD", "7030A0", "FF00FF", "FFFF00")
+internal val INK_COLORS = listOf(
+    "000000", "404040", "808080", "C00000", "FF0000", "ED7D31", "FF9900", "FFC000", "FFFF00", "92D050",
+    "548235", "00B050", "00B0F0", "185ABD", "0000FF", "7030A0", "FF00FF", "FF6699", "8B4513", "FFFFFF",
+)
 internal val INK_WIDTHS = listOf(1f, 2.5f, 4f, 6f, 10f)
 
 private fun ink(hex: String) = Color(0xFF000000 or hex.toLong(16))
+
+/** The current pen colour when it isn't one of the swatches, and a rainbow button for any other colour. */
+@Composable
+private fun InkMore(current: String, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    if (INK_COLORS.none { it.equals(current, true) }) InkSwatch(current, true) {}
+    Box(
+        Modifier.size(28.dp).background(
+            Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)), CircleShape,
+        ).border(1.dp, Color(0xFFBBBBBB), CircleShape).clickable { open = true },
+        contentAlignment = Alignment.Center,
+    ) { Text("+", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+    if (open) CustomColorDialog(current, { open = false }) { open = false; onPick(it) }
+}
 
 @Composable
 private fun InkSwatch(hex: String, selected: Boolean, onClick: () -> Unit) {
@@ -74,7 +92,8 @@ fun DrawBar(ui: EditorUiState, vm: EditorViewModel, modifier: Modifier = Modifie
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     INK_WIDTHS.forEach { w -> WidthDot(w, ui.drawWidth == w) { vm.setDrawWidth(w) } }
                     Spacer(Modifier.width(6.dp))
-                    INK_COLORS.forEach { hex -> InkSwatch(hex, ui.drawColor == hex) { vm.setDrawColor(hex) } }
+                    INK_COLORS.forEach { hex -> InkSwatch(hex, ui.drawColor.equals(hex, true)) { vm.setDrawColor(hex) } }
+                    InkMore(ui.drawColor) { vm.setDrawColor(it) }
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {

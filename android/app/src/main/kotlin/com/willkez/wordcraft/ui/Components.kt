@@ -161,7 +161,7 @@ fun CmdIcon(cmd: Cmd?, label: String, tint: Color, size: Int = 24) {
 /** A ribbon button: icon over a short label. */
 @Composable
 fun RBtn(label: String, icon: ImageVector?, enabled: Boolean = true, active: Boolean = false, cmd: Cmd? = null, onClick: () -> Unit) {
-    val ink = if (enabled) RibbonInk else RibbonInk.copy(alpha = 0.35f)
+    val ink = if (enabled) LocalAccent.current else RibbonInk.copy(alpha = 0.35f)
     Column(
         Modifier.widthIn(min = 52.dp, max = 72.dp).padding(horizontal = 2.dp).clip(RoundedCornerShape(6.dp))
             .background(if (active) WordBlue.copy(alpha = 0.22f) else Color.Transparent)
@@ -217,9 +217,9 @@ fun Combo(value: String, width: Int, entries: List<MenuEntry>) {
 /** A small square toggle (bold, italic, …). */
 @Composable
 fun MiniToggle(icon: ImageVector, label: String, active: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
-    val ink = if (enabled) RibbonInk else RibbonInk.copy(alpha = 0.35f)
+    val ink = if (enabled) LocalAccent.current else RibbonInk.copy(alpha = 0.35f)
     Box(
-        Modifier.size(30.dp).clip(RoundedCornerShape(4.dp)).background(if (active) WordBlue.copy(alpha = 0.28f) else Color.Transparent)
+        Modifier.size(30.dp).clip(RoundedCornerShape(4.dp)).background(if (active) LocalAccent.current.copy(alpha = 0.30f) else Color.Transparent)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, label, Modifier.size(20.dp), tint = ink) }
@@ -227,19 +227,20 @@ fun MiniToggle(icon: ImageVector, label: String, active: Boolean, enabled: Boole
 
 @Composable
 fun GroupBox(title: String, content: @Composable () -> Unit) {
+    val accent = LocalAccent.current
     Row(Modifier.height(IntrinsicSize.Min)) {
         Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(Modifier.heightIn(min = 60.dp), verticalAlignment = Alignment.CenterVertically) { content() }
-            Text(title, fontSize = 10.sp, color = Color(0xFF666666), maxLines = 1)
+            Text(title, fontSize = 10.sp, color = accent, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
-        VerticalDivider(Modifier.padding(vertical = 6.dp), color = Color(0xFFD0D0D0))
+        VerticalDivider(Modifier.padding(vertical = 6.dp), color = accent.copy(alpha = 0.35f))
     }
 }
 
 @Composable
 fun PanelSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-        Text(title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = WordBlue)
+        Text(title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Palette[(title.hashCode() and 0x7fffffff) % Palette.size])
         Spacer(Modifier.height(4.dp))
         content()
     }
@@ -256,7 +257,7 @@ fun MiniMenu(icon: ImageVector, label: String, enabled: Boolean = true, entries:
             Modifier.height(30.dp).clip(RoundedCornerShape(4.dp)).clickable(enabled = enabled) { open = true }.padding(start = 5.dp, end = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val ink = if (enabled) RibbonInk else RibbonInk.copy(alpha = 0.35f)
+            val ink = if (enabled) LocalAccent.current else RibbonInk.copy(alpha = 0.35f)
             Icon(icon, label, Modifier.size(20.dp), tint = ink)
             Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(13.dp), tint = ink)
         }
@@ -280,7 +281,7 @@ fun SplitMini(icon: ImageVector, label: String, active: Boolean, enabled: Boolea
         MiniToggle(icon, label, active, enabled, onClick)
         Box {
             Box(Modifier.width(14.dp).height(30.dp).clickable(enabled = enabled) { open = true }, contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.KeyboardArrowDown, "$label options", Modifier.size(14.dp), tint = if (enabled) RibbonInk else RibbonInk.copy(alpha = 0.35f))
+                Icon(Icons.Default.KeyboardArrowDown, "$label options", Modifier.size(14.dp), tint = if (enabled) LocalAccent.current else RibbonInk.copy(alpha = 0.35f))
             }
             DropdownMenu(open, { open = false }, Modifier.heightIn(max = 400.dp)) {
                 entries.forEach { e -> DropdownMenuItem(text = { Text(e.label) }, enabled = e.enabled, onClick = { open = false; e.onClick() }) }

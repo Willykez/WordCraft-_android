@@ -35,7 +35,11 @@ import com.willkez.wordcraft.data.RecentDoc
 import com.willkez.wordcraft.data.Recovery
 import java.util.Calendar
 
-private val PageBg = Color(0xFFF4F5F7)
+private val PageWash = Brush.verticalGradient(listOf(Color(0xFFE3EEFF), Color(0xFFF0E6FF), Color(0xFFFFE8F1), Color(0xFFFFF1DC)))
+private fun templateColor(key: String): Color = when (key) {
+    "blank" -> PaletteBlue; "letter" -> PaletteTeal; "resume" -> PalettePurple; "report" -> PaletteOrange; "sample" -> PalettePink
+    else -> WordBlue
+}
 private val TEMPLATES = listOf(
     Triple("Blank document", "blank", "Start from nothing"),
     Triple("Letter", "letter", "Formal letter"),
@@ -80,6 +84,10 @@ fun HomeScreen(
     onRemove: (RecentDoc) -> Unit = {},
     onClear: () -> Unit = {},
     thumbFor: (String) -> android.graphics.Bitmap? = { null },
+    onExplore: () -> Unit = {},
+    onSaveFolder: () -> Unit = {},
+    onTheme: () -> Unit = {},
+    saveFolderName: String? = null,
 ) {
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("All") }
@@ -94,8 +102,9 @@ fun HomeScreen(
     val pinned = shown.filter { it.pinned }
     val grouped = shown.filter { !it.pinned }.sortedByDescending { it.openedAt }.groupBy { dayBucket(it.openedAt) }
 
+    Box(Modifier.fillMaxSize().background(PageWash)) {
     Scaffold(
-        containerColor = PageBg,
+        containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             ExtendedFloatingActionButton(
@@ -107,7 +116,7 @@ fun HomeScreen(
         LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(bottom = 112.dp)) {
             item {
                 Column(
-                    Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(WordBlue, WordBlueDark)))
+                    Modifier.fillMaxWidth().background(Brush.linearGradient(ThemeGradient))
                         .statusBarsPadding().padding(horizontal = 20.dp).padding(top = 18.dp, bottom = 22.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -123,6 +132,9 @@ fun HomeScreen(
                             Text(greeting(), color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
                             Text("WordCraft", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
                         }
+                        IconButton(onExplore) { Icon(Icons.Default.Storage, "Browse documents on this device", tint = Color.White) }
+                        IconButton(onTheme) { Icon(Icons.Default.Palette, "App theme", tint = Color.White) }
+                        IconButton(onSaveFolder) { Icon(Icons.Default.FolderSpecial, "Choose the save folder", tint = Color.White) }
                         IconButton(onOpenFile) { Icon(Icons.Default.FolderOpen, "Open a file", tint = Color.White) }
                     }
                     Spacer(Modifier.height(16.dp))
@@ -137,6 +149,13 @@ fun HomeScreen(
                             focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
                         ),
                     )
+                }
+            }
+
+            item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ActionTile("Device documents", "Find every document on this phone", Icons.Default.Storage, PaletteTeal, Modifier.weight(1f), onExplore)
+                    ActionTile("Save folder", saveFolderName ?: "Not chosen yet", Icons.Default.FolderSpecial, PaletteOrange, Modifier.weight(1f), onSaveFolder)
                 }
             }
 
@@ -164,20 +183,27 @@ fun HomeScreen(
             item { SectionTitle("New") }
             item {
                 Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    TEMPLATES.forEach { (name, key, hint) -> TemplateCard(name, key, hint) { onNew(key) } }
+                    TEMPLATES.forEach { (name, key, hint) -> TemplateCard(name, key, hint, templateColor(key)) { onNew(key) } }
                 }
             }
 
             item {
                 Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 22.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Recent", Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Recent", Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = PaletteIndigo)
                     if (recents.any { !it.pinned }) TextButton({ confirmClear = true }) { Text("Clear") }
                 }
             }
             item {
                 Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("All", "Pinned", "Opened", "Saved", "Exported").forEach { f ->
-                        FilterChip(filter == f, { filter = f }, { Text(f) })
+                    listOf("All", "Pinned", "Opened", "Saved", "Exported").forEachIndexed { i, f ->
+                        val c = Palette[(i * 2) % Palette.size]
+                        FilterChip(
+                            filter == f, { filter = f }, { Text(f) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = tint(c, 0.10f), labelColor = c,
+                                selectedContainerColor = c, selectedLabelColor = Color.White,
+                            ),
+                        )
                     }
                 }
             }
@@ -203,15 +229,31 @@ fun HomeScreen(
             dismissButton = { TextButton({ confirmClear = false }) { Text("Cancel") } },
         )
     }
+    }
+}
+
+/** A coloured quick-action card (device documents, save folder). */
+@Composable
+private fun ActionTile(title: String, sub: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, modifier: Modifier, onClick: () -> Unit) {
+    Row(
+        modifier.clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(color, color.copy(alpha = 0.78f)))).clickable(onClick = onClick).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(26.dp))
+        Column(Modifier.padding(start = 10.dp)) {
+            Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(sub, color = Color.White.copy(alpha = 0.88f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
 }
 
 @Composable
 private fun SectionTitle(text: String) =
-    Text(text, Modifier.padding(start = 20.dp, top = 20.dp, bottom = 10.dp), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+    Text(text, Modifier.padding(start = 20.dp, top = 20.dp, bottom = 10.dp), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = PaletteTeal)
 
 @Composable
 private fun GroupTitle(text: String) =
-    Text(text.uppercase(), Modifier.padding(start = 20.dp, top = 18.dp, bottom = 4.dp), fontSize = 11.sp, color = WordBlue, fontWeight = FontWeight.SemiBold)
+    Text(text.uppercase(), Modifier.padding(start = 20.dp, top = 18.dp, bottom = 4.dp), fontSize = 11.sp, color = Palette[(text.hashCode() and 0x7fffffff) % Palette.size], fontWeight = FontWeight.SemiBold)
 
 @Composable
 private fun EmptyState(noneAtAll: Boolean, onOpenFile: () -> Unit) {
@@ -228,27 +270,27 @@ private fun EmptyState(noneAtAll: Boolean, onOpenFile: () -> Unit) {
 }
 
 @Composable
-private fun TemplateCard(name: String, key: String, hint: String, onClick: () -> Unit) {
+private fun TemplateCard(name: String, key: String, hint: String, color: Color, onClick: () -> Unit) {
     Column(Modifier.width(112.dp).clickable(onClick = onClick)) {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(0.77f).clip(RoundedCornerShape(8.dp)).background(Color.White)
-                .border(1.dp, Color(0xFFD6D9DF), RoundedCornerShape(8.dp)),
-        ) { PaperPreview(key) }
-        Text(name, Modifier.padding(top = 6.dp), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Modifier.fillMaxWidth().aspectRatio(0.77f).clip(RoundedCornerShape(8.dp)).background(tint(color, 0.10f))
+                .border(2.dp, color, RoundedCornerShape(8.dp)),
+        ) { PaperPreview(key, color) }
+        Text(name, Modifier.padding(top = 6.dp), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(hint, fontSize = 11.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
 /** A tiny drawing of the page layout each template starts with. */
 @Composable
-private fun PaperPreview(kind: String) {
+private fun PaperPreview(kind: String, base: Color = WordBlue) {
     Canvas(Modifier.fillMaxSize()) {
         val w = size.width; val h = size.height
-        val ink = Color(0xFFCDD2DA); val accent = WordBlue.copy(alpha = 0.75f)
+        val ink = base.copy(alpha = 0.28f); val accent = base.copy(alpha = 0.85f)
         fun line(x: Float, y: Float, len: Float, c: Color = ink, t: Float = h * 0.018f) = drawRect(c, Offset(x * w, y * h), Size(len * w, t))
         when (kind) {
             "blank" -> {
-                drawCircle(WordBlue.copy(alpha = 0.12f), w * 0.2f, Offset(w / 2, h / 2))
+                drawCircle(base.copy(alpha = 0.18f), w * 0.2f, Offset(w / 2, h / 2))
                 line(0.42f, 0.485f, 0.16f, accent, h * 0.03f); drawRect(accent, Offset(w * 0.488f, h * 0.43f), Size(w * 0.024f, h * 0.14f))
             }
             "letter" -> {
@@ -280,14 +322,7 @@ private fun PaperPreview(kind: String) {
 
 @Composable
 private fun TypeTile(doc: RecentDoc) {
-    val (bg, label) = when (doc.extension) {
-        "pdf" -> Color(0xFFD64545) to "PDF"
-        "txt", "md" -> Color(0xFF6B7280) to "TXT"
-        "odt" -> Color(0xFF1F9D8A) to "ODT"
-        "html", "htm" -> Color(0xFFE8833A) to "HTM"
-        "rtf" -> Color(0xFF7C5CC4) to "RTF"
-        else -> WordBlue to "DOC"
-    }
+    val (bg, label) = typeStyle(doc.extension)
     Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(bg), contentAlignment = Alignment.Center) {
         Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
@@ -299,7 +334,7 @@ private fun RecentRow(r: RecentDoc, thumbFor: (String) -> android.graphics.Bitma
     val whenText = DateUtils.getRelativeTimeSpanString(r.openedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE).toString()
     Card(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clickable { onOpen(r) },
-        colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(1.dp),
+        colors = CardDefaults.cardColors(containerColor = tint(typeStyle(r.extension).first, 0.09f)), elevation = CardDefaults.cardElevation(1.dp),
         shape = RoundedCornerShape(12.dp),
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {

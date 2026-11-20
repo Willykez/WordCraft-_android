@@ -3,6 +3,7 @@
 use serde_json::{Value, json};
 use std::sync::Arc;
 use wordcraft_doc::props::{Border, BorderStyle, Borders, CharProps, LineSpacing, Rgb, TextColor};
+use wordcraft_doc::section::PageBorderDisplay;
 use wordcraft_doc::{Watermark, styles};
 
 use super::sel_result;
@@ -79,7 +80,7 @@ pub fn specs() -> Vec<CommandSpec> {
         })
         .params(r#"{"color": "RRGGBB" | null}"#),
         CommandSpec::new("design.pageBorders", "Page Borders", "Design › Page Background", page_borders).params(
-            r#"{"kind"?: "box|none", "width"?: pt, "color"?: "RRGGBB", "style"?: "single|double|dotted|dashed|thick|triple|dotDash|wave", "sides"?: {"top"|"left"|"bottom"|"right": {"style"?, "width"?: pt, "color"?: "RRGGBB"} | null} (exactly these sides, instead of `kind`), "applyTo"?: "section|document"}"#,
+            r#"{"kind"?: "box|none", "width"?: pt, "color"?: "RRGGBB", "style"?: "single|double|dotted|dashed|thick|triple|dotDash|wave", "sides"?: {"top"|"left"|"bottom"|"right": {"style"?, "width"?: pt, "color"?: "RRGGBB"} | null} (exactly these sides, instead of `kind`), "applyTo"?: "section|document", "display"?: "all|first|notFirst" (which pages of the section show the border; with applyTo "document", "first" keeps it on the document's first page only)}"#,
         ),
         CommandSpec::new("design.setDefault", "Set as Default", "Design › Document Formatting", |s, _| {
             s.status = "These settings will be used for new documents.".into();
@@ -278,13 +279,32 @@ fn page_borders(s: &mut Session, v: &Value) -> CmdResult {
             (kind != "none").then(|| Borders::box_(Border { style, width, color, space: 24.0 }))
         }
     };
-    let blocks: Vec<usize> = match p::str(v, "applyTo") {
-        Some("document") => s.doc.sections().iter().map(|(end, _)| *end).collect(),
-        Some("section") | None => vec![s.sel.focus.path.0.first().copied().unwrap_or(0) as usize],
+    let display = match p::str(v, "display") {
+        None | Some("all") | Some("allPages") => PageBorderDisplay::AllPages,
+        Some("first") | Some("firstPage") => PageBorderDisplay::FirstPage,
+        Some("notFirst") | Some("notFirstPage") => PageBorderDisplay::NotFirstPage,
+        Some(x) => return Err(CmdError::Params(format!("unknown `display` `{x}`"))),
+    };
+    let whole_document = match p::str(v, "applyTo") {
+        Some("document") => true,
+        Some("section") | None => false,
         Some(x) => return Err(CmdError::Params(format!("unknown `applyTo` `{x}`"))),
     };
-    for block in blocks {
-        s.doc.section_mut(block).page_borders = borders;
+    let ends: Vec<usize> = s.doc.sections().iter().map(|(end, _)| *end).collect();
+    if whole_document {
+        for (i, block) in ends.iter().enumerate() {
+            // "First page only" for the whole document means the document's first page: only the
+            // first section keeps the border, so later sections do not repeat it on their own first pages.
+            let keep = display != PageBorderDisplay::FirstPage || i == 0;
+            let sec = s.doc.section_mut(*block);
+            sec.page_borders = if keep { borders } else { None };
+            sec.page_border_display = display;
+        }
+    } else {
+        let block = s.sel.focus.path.0.first().copied().unwrap_or(0) as usize;
+        let sec = s.doc.section_mut(block);
+        sec.page_borders = borders;
+        sec.page_border_display = display;
     }
     sel_result(s)
 }

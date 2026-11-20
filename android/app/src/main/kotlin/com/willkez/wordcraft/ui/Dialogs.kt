@@ -89,6 +89,7 @@ fun ResultDialog(title: String, text: String, onDismiss: () -> Unit) {
 @Composable
 fun Backstage(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, actions: EditorActions) {
     fun go(block: () -> Unit) { vm.showBackstage(false); block() }
+    val autoCap by vm.autoCapitalize.collectAsState()
     Surface(Modifier.fillMaxSize(), color = Color(0xFFF7F7F7)) {
         Column(Modifier.statusBarsPadding().navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().background(WordBlue).height(52.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -100,6 +101,9 @@ fun Backstage(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, actions: Ed
                 BsItem("Open", Icons.Default.FolderOpen) { go(actions::openFile) }
                 BsItem("Save", Icons.Default.Save) { go(actions::save) }
                 BsItem("Save as Word document (.docx)", Icons.Default.Save) { go { actions.saveCopy("docx") } }
+                BsItem("Save location…", Icons.Default.FolderSpecial) { go(actions::chooseSaveFolder) }
+                BsItem("App theme…", Icons.Default.Palette) { go(actions::chooseTheme) }
+                BsItem("Capitalise sentences while typing: ${if (autoCap) "On" else "Off"}", Icons.Default.TextFields) { vm.setAutoCapitalize(!autoCap) }
                 BsSection("Export")
                 listOf("PDF" to "pdf", "OpenDocument text (.odt)" to "odt", "Plain text (.txt)" to "txt", "Web page (.html)" to "html")
                     .forEach { (n, f) -> BsItem(n, Icons.Default.Share) { go { actions.saveCopy(f) } } }

@@ -751,6 +751,52 @@ impl DocGrid {
     }
 }
 
+/// Which pages of a section show its page border (`w:pgBorders` `w:display`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum PageBorderDisplay {
+    /// Every page of the section.
+    #[default]
+    AllPages,
+    /// Only the first page of the section.
+    FirstPage,
+    /// Every page of the section except its first.
+    NotFirstPage,
+}
+
+impl PageBorderDisplay {
+    /// True for the default, so a plain document serialises exactly as before.
+    pub fn is_all_pages(&self) -> bool {
+        matches!(self, Self::AllPages)
+    }
+
+    /// Whether a page shows the border, given whether it is the section's first page.
+    pub fn shows(self, first_in_section: bool) -> bool {
+        match self {
+            Self::AllPages => true,
+            Self::FirstPage => first_in_section,
+            Self::NotFirstPage => !first_in_section,
+        }
+    }
+
+    /// The `w:display` value, or `None` for the default (`allPages`).
+    pub fn ooxml(self) -> Option<&'static str> {
+        match self {
+            Self::AllPages => None,
+            Self::FirstPage => Some("firstPage"),
+            Self::NotFirstPage => Some("notFirstPage"),
+        }
+    }
+
+    pub fn from_ooxml(v: Option<&str>) -> Self {
+        match v {
+            Some("firstPage") => Self::FirstPage,
+            Some("notFirstPage") => Self::NotFirstPage,
+            _ => Self::AllPages,
+        }
+    }
+}
+
 /// Page setup and section-level settings.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -797,6 +843,10 @@ pub struct SectionProps {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub form_prot: Option<bool>,
     pub page_borders: Option<Borders>,
+    /// Which pages of the section carry `page_borders` (`w:pgBorders` `w:display`, ECMA-376
+    /// §17.6.10): every page, only the section's first page, or every page but the first.
+    #[serde(skip_serializing_if = "PageBorderDisplay::is_all_pages")]
+    pub page_border_display: PageBorderDisplay,
     /// Text direction / bidi section.
     pub rtl: bool,
     /// Which way the section's text runs (`w:textDirection`, ECMA-376 §17.6.20): vertical
@@ -860,6 +910,7 @@ impl Default for SectionProps {
             valign: PageVAlign::Top,
             form_prot: None,
             page_borders: None,
+            page_border_display: PageBorderDisplay::AllPages,
             rtl: false,
             text_direction: crate::props::TextDirection::Horizontal,
             text_direction_set: false,
@@ -1070,5 +1121,27 @@ mod tests {
         };
         // Text width 468: the first column hugs the right edge, the second sits 20pt to its left.
         assert_eq!(s.column_boxes(), vec![(368.0, 100.0), (148.0, 200.0)]);
+    }
+}
+
+#[cfg(test)]
+mod page_border_display_tests {
+    use super::PageBorderDisplay;
+
+    #[test]
+    fn first_page_only_shows_on_the_first_page_alone() {
+        assert!(PageBorderDisplay::FirstPage.shows(true));
+        assert!(!PageBorderDisplay::FirstPage.shows(false));
+        assert!(!PageBorderDisplay::NotFirstPage.shows(true));
+        assert!(PageBorderDisplay::NotFirstPage.shows(false));
+        assert!(PageBorderDisplay::AllPages.shows(true) && PageBorderDisplay::AllPages.shows(false));
+    }
+
+    #[test]
+    fn display_round_trips_through_ooxml() {
+        for d in [PageBorderDisplay::AllPages, PageBorderDisplay::FirstPage, PageBorderDisplay::NotFirstPage] {
+            assert_eq!(PageBorderDisplay::from_ooxml(d.ooxml()), d);
+        }
+        assert_eq!(PageBorderDisplay::from_ooxml(Some("allPages")), PageBorderDisplay::AllPages);
     }
 }

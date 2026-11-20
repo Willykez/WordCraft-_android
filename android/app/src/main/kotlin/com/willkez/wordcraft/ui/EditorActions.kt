@@ -9,4 +9,8 @@ interface EditorActions {
     fun copy(cut: Boolean)
     fun paste()
     fun close()
+    /** Opens the save-location dialog (permanent folder, or ask every time). */
+    fun chooseSaveFolder()
+    /** Opens the app-theme dialog. */
+    fun chooseTheme()
 }

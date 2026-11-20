@@ -19,9 +19,13 @@ import com.willkez.wordcraft.editor.TypingSink
  * Word-style editor: title bar with Quick Access, tabs, a collapsible ribbon, the pages with floating
  * panels over them, a status bar and a bottom quick-action bar.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
     val ui by vm.ui.collectAsState()
+    val autoCap by vm.autoCapitalize.collectAsState()
+    // On a short screen the keyboard leaves little room for the page: fold the ribbon away while it is open.
+    val ribbonShown = ui.ribbonExpanded && !(WindowInsets.isImeVisible && androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 720)
     val d = remember(vm, actions) { Dispatcher(vm, actions) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -43,7 +47,7 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
         Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
             TitleBar(ui, vm, d, actions)
             RibbonTabs(ui, tab, contextTabs, vm)
-            AnimatedVisibility(ui.ribbonExpanded) { RibbonBody(ui, tab, d) }
+            AnimatedVisibility(ribbonShown) { RibbonBody(ui, tab, d) }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 PageCanvas(
                     vm = vm, pages = ui.pages, caret = ui.caret, selection = ui.selection,
@@ -52,7 +56,7 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
                     draw = ui.drawTool?.let { com.willkez.wordcraft.editor.DrawSettings(it, ui.drawColor, ui.drawWidth, ui.stylusOnly) },
                     onTapped = { typingReset++; runCatching { focus.requestFocus() }; keyboard?.show(); keyboardShown = true },
                 )
-                TypingSink(vm, focus, typingReset) { s ->
+                TypingSink(vm, focus, typingReset, autoCap) { s ->
                     when (s) {
                         "copy" -> actions.copy(false); "cut" -> actions.copy(true); "paste" -> actions.paste()
                         "save" -> actions.save(); "find" -> vm.openPanel("find")

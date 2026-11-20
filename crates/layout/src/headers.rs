@@ -389,13 +389,15 @@ pub(crate) fn headers_footers(ctx: &mut Ctx, pages: &mut [Page], sections: &[(us
 /// header, text, notes and footer move to start at the outside margin. Page borders, measured
 /// from the page edge, stay.
 pub(crate) fn mirror_even_pages(pages: &mut [Page], sections: &[(usize, &SectionProps)]) {
-    for page in pages.iter_mut().filter(|p| p.number % 2 == 0) {
+    // Whether each page opens its section: only those pages may have lost the border to `display`.
+    let firsts: Vec<bool> = (0..pages.len()).map(|i| i == 0 || pages[i - 1].section != pages[i].section).collect();
+    for (i, page) in pages.iter_mut().enumerate().filter(|(_, p)| p.number % 2 == 0) {
         let Some((_, s)) = sections.get(page.section) else { continue };
         let dx = s.margin_right - s.margin_left - s.gutter;
         if dx.abs() < 0.001 || !dx.is_finite() {
             continue;
         }
-        let borders = page_border_rules(s).len();
+        let borders = page_border_rules(s, firsts[i]).len();
         for it in page.items.iter_mut().skip(borders).chain(page.header.iter_mut()).chain(page.footer.iter_mut()) {
             it.translate(dx, 0.0);
         }

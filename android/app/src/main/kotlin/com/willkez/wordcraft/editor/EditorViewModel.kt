@@ -17,6 +17,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import com.willkez.wordcraft.WordcraftApp
+import com.willkez.wordcraft.data.DeviceDoc
+import com.willkez.wordcraft.data.DeviceDocs
 import com.willkez.wordcraft.data.DocumentStore
 import com.willkez.wordcraft.data.RecentDoc
 import com.willkez.wordcraft.data.Recovery
@@ -100,6 +102,34 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun pinRecent(uri: String) { store.togglePin(uri); reloadRecents() }
     fun forgetRecent(uri: String) { store.forget(uri); reloadRecents() }
     fun clearRecents() { store.clear(); reloadRecents() }
+
+    // ---- save folder ----------------------------------------------------------------------------
+    private val _saveFolder = MutableStateFlow(store.saveTreeName())
+    /** Readable name of the permanent save folder, or null when none is chosen. */
+    val saveFolder: StateFlow<String?> = _saveFolder
+    private val _askEveryTime = MutableStateFlow(store.askEveryTime)
+    val askEveryTime: StateFlow<Boolean> = _askEveryTime
+    private val _autoCap = MutableStateFlow(store.autoCapitalize)
+    val autoCapitalize: StateFlow<Boolean> = _autoCap
+    fun setAutoCapitalize(on: Boolean) { store.autoCapitalize = on; _autoCap.value = on }
+    fun saveTree(): Uri? = store.saveTree()
+    fun setSaveTree(uri: Uri?) { store.setSaveTree(uri); _saveFolder.value = store.saveTreeName() }
+    fun setAskEveryTime(on: Boolean) { store.askEveryTime = on; _askEveryTime.value = on }
+
+    // ---- documents found on the device ----------------------------------------------------------
+    private val _device = MutableStateFlow<List<DeviceDoc>>(emptyList())
+    val device: StateFlow<List<DeviceDoc>> = _device
+    private val _scanning = MutableStateFlow(false)
+    val scanning: StateFlow<Boolean> = _scanning
+    fun scanDevice() {
+        if (_scanning.value) return
+        _scanning.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try { _device.value = DeviceDocs.scan(getApplication(), store.saveTree()) }
+            catch (e: Exception) { say("Could not list documents: ${e.message}") }
+            finally { _scanning.value = false }
+        }
+    }
 
     /** All engine calls that change state run on one thread, so typed characters keep their order. */
     private val engineThread: CoroutineDispatcher = Executors.newSingleThreadExecutor { Thread(it, "engine") }.asCoroutineDispatcher()
@@ -231,8 +261,24 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                 markSaved()
                 store.remember(uri, sourceName, "Saved"); reloadRecents()
                 say("Saved")
-            } catch (e: Exception) { say("Save failed: ${e.message}") }
+            } catch (e: Exception) {
+                // The original could not be rewritten in place (a read-only or provider-owned file): keep the work in the save folder.
+                val tree = store.saveTree()
+                if (tree != null) {
+                    val ext = sourceName.substringAfterLast('.', "docx").lowercase().let { if (it in setOf("docx", "odt")) it else "docx" }
+                    saveToFolder(tree, ext, copyOnly = false)
+                    say("Could not write the original file; saved a copy in your save folder")
+                } else say("Save failed: ${e.message}")
+            }
         }
+    }
+
+    /** New file in the permanent folder: `name.ext`, or `name(1).ext` when that exists. */
+    fun saveToFolder(tree: Uri, format: String, copyOnly: Boolean) = launchEngine {
+        val wanted = suggestedName(format)
+        val uri = try { store.createUnique(tree, wanted, DocumentStore.mimeFor(format)) }
+        catch (e: Exception) { say("Cannot write to the save folder: ${e.message}"); return@launchEngine }
+        saveAs(uri, format, copyOnly)
     }
 
     /** Called when the activity stops, so leaving the app never loses typing. */
@@ -330,16 +376,73 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun typeText(text: String) {
-        if (_ui.value.issue != null) dismissIssue()
-        // Split on line breaks: each one is a real paragraph break (Enter), the rest is plain typing.
-        text.split('\n').forEachIndexed { i, part ->
-            if (i > 0) run("text.newParagraph")
-            if (part.isNotEmpty()) run("text.insert", mapOf("text" to part))
+    // ---- typing and deleting ---------------------------------------------------------------------
+    // Keystrokes (and a held Backspace) can arrive faster than the engine lays pages out. They are queued,
+    // and everything waiting is applied in one go with a single refresh, so the caret keeps up with the keyboard.
+    // Any other command bumps `commandEpoch`; edits made before it still run before it, and edits made after it run after.
+
+    private sealed interface Edit {
+        class Insert(val text: String) : Edit
+        data object Back : Edit
+        data object Forward : Edit
+    }
+    private class Queued(val edit: Edit, val epoch: Int)
+    private val pendingEdits = java.util.concurrent.ConcurrentLinkedQueue<Queued>()
+    private val draining = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val commandEpoch = java.util.concurrent.atomic.AtomicInteger(0)
+
+    private fun enqueue(e: Edit) {
+        pendingEdits.add(Queued(e, commandEpoch.get()))
+        drainEdits()
+    }
+
+    private fun drainEdits() {
+        if (!draining.compareAndSet(false, true)) return // a drain is already scheduled; it will see this edit
+        launchEngine(bumpEpoch = false) {
+            try {
+                val s = session
+                val epoch = pendingEdits.peek()?.epoch
+                if (s == null || epoch == null) { pendingEdits.clear(); return@launchEngine }
+                val batch = ArrayList<Edit>()
+                while (pendingEdits.peek()?.epoch == epoch) batch.add(pendingEdits.poll()!!.edit)
+                var i = 0
+                try {
+                    while (i < batch.size) {
+                        when (val e = batch[i]) {
+                            is Edit.Insert -> {
+                                val sb = StringBuilder()
+                                while (i < batch.size && batch[i] is Edit.Insert) { sb.append((batch[i] as Edit.Insert).text); i++ }
+                                insertRaw(s, sb.toString())
+                            }
+                            Edit.Back -> { var n = 0; while (i < batch.size && batch[i] === Edit.Back) { n++; i++ }; repeat(n) { s.execute("text.backspace", "") } }
+                            Edit.Forward -> { var n = 0; while (i < batch.size && batch[i] === Edit.Forward) { n++; i++ }; repeat(n) { s.execute("text.delete", "") } }
+                        }
+                    }
+                } catch (e: Exception) { say(e.message ?: "Edit failed") }
+                refresh()
+            } finally {
+                draining.set(false)
+            }
+            // Edits that arrived after the last look at the queue (or after another command) get their own pass.
+            if (pendingEdits.isNotEmpty()) drainEdits()
         }
     }
 
-    fun backspace(count: Int = 1) = repeat(count) { run("text.backspace") }
+    /** Line breaks are real paragraph breaks (Enter); the rest is plain typing. */
+    private fun insertRaw(s: MobileSession, text: String) {
+        text.split('\n').forEachIndexed { i, part ->
+            if (i > 0) s.execute("text.newParagraph", "")
+            if (part.isNotEmpty()) s.execute("text.insert", JSONObject(mapOf("text" to part)).toString())
+        }
+    }
+
+    fun typeText(text: String) {
+        if (_ui.value.issue != null) dismissIssue()
+        enqueue(Edit.Insert(text))
+    }
+
+    fun backspace(count: Int = 1) = repeat(count) { enqueue(Edit.Back) }
+    fun deleteForward(count: Int = 1) = repeat(count) { enqueue(Edit.Forward) }
     fun undo() = launchEngine { session?.undo(); refresh() }
     fun redo() = launchEngine { session?.redo(); refresh() }
 
@@ -489,7 +592,8 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     // ---- internals ---------------------------------------------------------------------------
 
     /** Every engine call goes through here: a failure becomes a message, never a crash. */
-    private fun launchEngine(block: suspend () -> Unit) {
+    private fun launchEngine(bumpEpoch: Boolean = true, block: suspend () -> Unit) {
+        if (bumpEpoch) commandEpoch.incrementAndGet()
         viewModelScope.launch(engineThread) {
             try {
                 block()

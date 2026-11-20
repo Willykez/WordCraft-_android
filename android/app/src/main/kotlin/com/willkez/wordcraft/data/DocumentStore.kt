@@ -2,6 +2,7 @@ package com.willkez.wordcraft.data
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 
 /** One entry in the activity list: what happened to a file (`Opened`, `Saved`, `Exported`) and when. */
@@ -31,6 +32,76 @@ class DocumentStore(private val ctx: Context) {
     fun write(uri: Uri, bytes: ByteArray) {
         val out = ctx.contentResolver.openOutputStream(uri, "wt") ?: error("Cannot write $uri")
         out.use { it.write(bytes) }
+    }
+
+    // ---- permanent save folder ------------------------------------------------------------------
+
+    /** The folder chosen once for every new document, Save As and export; null when none is chosen or access was revoked. */
+    fun saveTree(): Uri? {
+        val uri = prefs.getString("save_tree", null)?.let(Uri::parse) ?: return null
+        val ok = ctx.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isWritePermission }
+        return uri.takeIf { ok }
+    }
+
+    fun setSaveTree(uri: Uri?) {
+        prefs.edit().apply { if (uri == null) remove("save_tree") else putString("save_tree", uri.toString()) }.apply()
+    }
+
+    /** Old behaviour on request: show the system "save as" picker every time. */
+    var askEveryTime: Boolean
+        get() = prefs.getBoolean("ask_each_time", false)
+        set(v) { prefs.edit().putBoolean("ask_each_time", v).apply() }
+
+    /** Capitalise the first letter of each sentence while typing. */
+    var autoCapitalize: Boolean
+        get() = prefs.getBoolean("auto_cap", true)
+        set(v) { prefs.edit().putBoolean("auto_cap", v).apply() }
+
+    /** A readable name for the folder ("Documents/WordCraft"). */
+    fun saveTreeName(): String? = saveTree()?.let { treeLabel(it) }
+
+    fun treeLabel(tree: Uri): String {
+        val id = runCatching { DocumentsContract.getTreeDocumentId(tree) }.getOrNull() ?: return "Chosen folder"
+        val path = id.substringAfter(':', "")
+        return if (path.isBlank()) "Internal storage" else path
+    }
+
+    /** Creates `wanted` in the folder, or `name(1).ext`, `name(2).ext`… when that name is taken (never `name.ext (1)`). */
+    fun createUnique(tree: Uri, wanted: String, mime: String): Uri {
+        val resolver = ctx.contentResolver
+        val treeId = DocumentsContract.getTreeDocumentId(tree)
+        val parent = DocumentsContract.buildDocumentUriUsingTree(tree, treeId)
+        val taken = mutableSetOf<String>()
+        resolver.query(
+            DocumentsContract.buildChildDocumentsUriUsingTree(tree, treeId),
+            arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null,
+        )?.use { while (it.moveToNext()) it.getString(0)?.let { n -> taken += n.lowercase() } }
+        val name = uniqueName(wanted, taken)
+        return DocumentsContract.createDocument(resolver, parent, mime, name) ?: error("Cannot create $name in the save folder")
+    }
+
+    companion object {
+        /** `report.pdf` → `report(1).pdf` → `report(2).pdf` (`taken` holds lower-case names). */
+        fun uniqueName(wanted: String, taken: Set<String>): String {
+            if (wanted.lowercase() !in taken) return wanted
+            val dot = wanted.lastIndexOf('.')
+            val base = if (dot > 0) wanted.substring(0, dot) else wanted
+            val ext = if (dot > 0) wanted.substring(dot) else ""
+            var i = 1
+            while ("$base($i)$ext".lowercase() in taken) i++
+            return "$base($i)$ext"
+        }
+
+        /** The real MIME type for a format, so the system never appends its own " (1)" or extension. */
+        fun mimeFor(ext: String): String = when (ext.lowercase()) {
+            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "odt" -> "application/vnd.oasis.opendocument.text"
+            "pdf" -> "application/pdf"
+            "txt" -> "text/plain"
+            "html", "htm" -> "text/html"
+            "rtf" -> "application/rtf"
+            else -> "application/octet-stream"
+        }
     }
 
     fun recents(): List<RecentDoc> =

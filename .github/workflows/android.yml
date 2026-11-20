@@ -1,5 +1,5 @@
 
-name: Android
+name: WordCraft Android CI
 
 on:
   push:
@@ -11,7 +11,6 @@ on:
       - "assets/**"
       - "Cargo.toml"
       - ".github/workflows/android.yml"
-
   pull_request:
     paths:
       - "android/**"
@@ -19,30 +18,159 @@ on:
       - "assets/**"
       - "Cargo.toml"
       - ".github/workflows/android.yml"
-
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: Which Android build to run
+        required: true
+        type: choice
+        options:
+          - debug
+          - release
+          - both
+        default: debug
 
 permissions:
   contents: read
 
 concurrency:
-  group: android-${{ github.ref }}
+  group: wordcraft-ci-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  NDK_VERSION: 27.2.12479018
-  GRADLE_VERSION: 8.10.2
   JAVA_VERSION: "17"
+  NDK_VERSION: "27.2.12479018"
+  GRADLE_VERSION: "8.10.2"
+  RUST_TOOLCHAIN: stable
+  CARGO_TERM_COLOR: always
 
 jobs:
 
-  # ============================================
-  # DEBUG BUILD + RUST TESTS
-  # ============================================
+  # --------------------------------------------------
+  # 1. FAST PREFLIGHT
+  # --------------------------------------------------
+  preflight:
+    name: Fast Source Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install KtLint
+        run: |
+          curl -fsSL \
+            https://github.com/ktlint/ktlint/releases/download/1.8.0/ktlint \
+            -o ktlint
+          chmod +x ktlint
+          sudo mv ktlint /usr/local/bin/ktlint
+
+      - name: Kotlin formatting check
+        run: |
+          ktlint "android/app/src/main/kotlin/**/*.kt"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt
+
+      - name: Rust formatting check
+        shell: bash
+        run: |
+          if [ -f android/rust/Cargo.toml ]; then
+            cd android/rust
+            cargo fmt --all -- --check
+          else
+            echo "Rust workspace not found at android/rust; skipping Rust format check."
+          fi
+
+      - name: Validate Cargo metadata
+        shell: bash
+        run: |
+          if [ -f android/rust/Cargo.toml ]; then
+            cd android/rust
+            cargo metadata --no-deps --format-version 1
+          else
+            echo "Cargo workspace not found; skipping metadata validation."
+          fi
+
+      - name: Validate workflow YAML
+        run: |
+          python -m pip install --quiet pyyaml
+          python - <<'PY'
+          import yaml
+          from pathlib import Path
+
+          for file in Path(".github/workflows").glob("*.yml"):
+              with file.open() as f:
+                  yaml.safe_load(f)
+              print(f"Valid YAML: {file}")
+          PY
+
+  # --------------------------------------------------
+  # 2. RUST TESTS (INDEPENDENT)
+  # --------------------------------------------------
+  rust-tests:
+    name: Rust Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: []
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            android/rust -> target
+          shared-key: wordcraft-rust
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Configure sccache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+
+      - name: Rust tests
+        shell: bash
+        run: |
+          if [ -f android/rust/Cargo.toml ]; then
+            cd android/rust
+            cargo test --workspace
+          else
+            echo "No Rust workspace at android/rust; skipping Rust tests."
+          fi
+
+  # --------------------------------------------------
+  # 3. ANDROID DEBUG APK - ARM64
+  # --------------------------------------------------
   debug:
-    name: Debug Build
+    name: Debug APK (ARM64)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    needs: preflight
+
+    if: |
+      github.event_name != 'workflow_dispatch' ||
+      inputs.build_type == 'debug' ||
+      inputs.build_type == 'both'
 
     steps:
       - name: Checkout
@@ -57,17 +185,27 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android
 
       - name: Install cargo-ndk
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-ndk
 
-      - name: Rust Cache
+      - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: android/rust
+          workspaces: |
+            android/rust -> target
+          shared-key: wordcraft-rust-arm64-debug
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Configure compiler cache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
 
       - name: Install Android NDK
         run: |
@@ -81,10 +219,6 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
-      - name: Rust Tests
-        working-directory: android/rust
-        run: cargo test
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -96,25 +230,31 @@ jobs:
         run: |
           gradle :app:assembleDebug \
             --no-daemon \
+            --build-cache \
+            --parallel \
             -PdevBuild=true
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: wordcraft-android-debug
+          name: WordCraft-Debug-ARM64
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
-  # ============================================
-  # OPTIMIZED PRODUCTION RELEASE
-  # ============================================
+  # --------------------------------------------------
+  # 4. ANDROID RELEASE - FULL BUILD
+  # --------------------------------------------------
   release:
-    name: Release Build
+    name: Release APK / AAB
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    needs: preflight
 
-    if: github.event_name != 'pull_request'
+    if: |
+      github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') ||
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.build_type == 'release' || inputs.build_type == 'both')
 
     steps:
       - name: Checkout
@@ -136,10 +276,20 @@ jobs:
         with:
           tool: cargo-ndk
 
-      - name: Rust Cache
+      - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: android/rust
+          workspaces: |
+            android/rust -> target
+          shared-key: wordcraft-rust-release
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Configure compiler cache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
 
       - name: Install Android NDK
         run: |
@@ -237,7 +387,9 @@ jobs:
           WORDCRAFT_KEY_PASSWORD: ${{ secrets.WORDCRAFT_KEY_PASSWORD }}
         run: |
           gradle :app:assembleRelease :app:bundleRelease \
-            --no-daemon
+            --no-daemon \
+            --build-cache \
+            --parallel
 
       # ----------------------------------------
       # Verify release artifacts
@@ -262,7 +414,7 @@ jobs:
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: wordcraft-android-release-apk
+          name: WordCraft-Release-APK
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
@@ -270,7 +422,7 @@ jobs:
       - name: Upload Release AAB
         uses: actions/upload-artifact@v4
         with:
-          name: wordcraft-android-release-aab
+          name: WordCraft-Release-AAB
           path: android/app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
           retention-days: 30
@@ -290,9 +442,9 @@ jobs:
         run: |
           rm -rf "$RUNNER_TEMP/wordcraft-signing"
 
-  # ============================================
-  # AUTOMATIC GITHUB RELEASE
-  # ============================================
+  # --------------------------------------------------
+  # 5. AUTOMATIC GITHUB RELEASE
+  # --------------------------------------------------
   publish:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
@@ -307,13 +459,13 @@ jobs:
       - name: Download Release APK
         uses: actions/download-artifact@v4
         with:
-          name: wordcraft-android-release-apk
+          name: WordCraft-Release-APK
           path: release/apk
 
       - name: Download Release AAB
         uses: actions/download-artifact@v4
         with:
-          name: wordcraft-android-release-aab
+          name: WordCraft-Release-AAB
           path: release/aab
 
       - name: Publish GitHub Release

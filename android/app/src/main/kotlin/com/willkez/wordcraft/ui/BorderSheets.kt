@@ -142,18 +142,24 @@ internal fun TableBorderPreview(kind: String, width: Double, color: Color) {
 
 /** The page with its border drawn on, so a choice of sides, style and colour is visible before it is applied. */
 @Composable
-private fun PageBorderPreview(sides: Set<String>, style: String, width: Double, color: Color) {
-    Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.width(108.dp).height(144.dp).clip(RoundedCornerShape(4.dp)).background(Color.White).border(1.dp, Color(0xFFCBD0D8), RoundedCornerShape(4.dp))) {
-            val m = 12.dp.toPx(); val l = m; val r = size.width - m; val t = m; val b = size.height - m
-            for (i in 0..7) {
-                val w = (r - l - 20.dp.toPx()) * if (i % 4 == 3) 0.5f else 1f
-                drawRoundRect(Color(0xFFE4E7EC), Offset(l + 10.dp.toPx(), t + 14.dp.toPx() + i * 12.dp.toPx()), Size(w, 4.dp.toPx()), CornerRadius(2.dp.toPx()))
+private fun PageBorderPreview(sides: Set<String>, style: String, width: Double, color: Color, display: String = "all") {
+    Row(Modifier.fillMaxWidth().height(150.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+        // Two pages side by side: the border shows on each page `display` allows.
+        listOf(true, false).forEach { firstPage ->
+            val shown = when (display) { "first" -> firstPage; "notFirst" -> !firstPage; else -> true }
+            Canvas(Modifier.width(108.dp).height(144.dp).clip(RoundedCornerShape(4.dp)).background(Color.White).border(1.dp, Color(0xFFCBD0D8), RoundedCornerShape(4.dp))) {
+                val m = 12.dp.toPx(); val l = m; val r = size.width - m; val t = m; val b = size.height - m
+                for (i in 0..7) {
+                    val w = (r - l - 20.dp.toPx()) * if (i % 4 == 3) 0.5f else 1f
+                    drawRoundRect(Color(0xFFE4E7EC), Offset(l + 10.dp.toPx(), t + 14.dp.toPx() + i * 12.dp.toPx()), Size(w, 4.dp.toPx()), CornerRadius(2.dp.toPx()))
+                }
+                if (shown) {
+                    if ("top" in sides) borderLine(Offset(l, t), Offset(r, t), style, width, color)
+                    if ("bottom" in sides) borderLine(Offset(l, b), Offset(r, b), style, width, color)
+                    if ("left" in sides) borderLine(Offset(l, t), Offset(l, b), style, width, color)
+                    if ("right" in sides) borderLine(Offset(r, t), Offset(r, b), style, width, color)
+                }
             }
-            if ("top" in sides) borderLine(Offset(l, t), Offset(r, t), style, width, color)
-            if ("bottom" in sides) borderLine(Offset(l, b), Offset(r, b), style, width, color)
-            if ("left" in sides) borderLine(Offset(l, t), Offset(l, b), style, width, color)
-            if ("right" in sides) borderLine(Offset(r, t), Offset(r, b), style, width, color)
         }
     }
 }
@@ -380,10 +386,11 @@ fun PageBordersSheet(d: Dispatcher, onDismiss: () -> Unit) {
     var width by remember { mutableStateOf(1.5) }
     var color by remember { mutableStateOf("000000") }
     var applyTo by remember { mutableStateOf("document") }
+    var display by remember { mutableStateOf("all") }
     AppSheet(onDismiss) {
         SheetTitle("Page borders", "Design")
         SheetScroll {
-            PageBorderPreview(sides, style, width, parseHex(color) ?: Color.Black)
+            PageBorderPreview(sides, style, width, parseHex(color) ?: Color.Black, display)
             SectionLabel("Setting")
             PillRow {
                 Pill("None", sides.isEmpty()) { sides = emptySet() }
@@ -404,6 +411,12 @@ fun PageBordersSheet(d: Dispatcher, onDismiss: () -> Unit) {
                 Pill("Whole document", applyTo == "document") { applyTo = "document" }
                 Pill("This section", applyTo == "section") { applyTo = "section" }
             }
+            SectionLabel("Show on")
+            PillRow {
+                Pill("All pages", display == "all") { display = "all" }
+                Pill("First page only", display == "first") { display = "first" }
+                Pill("All except first", display == "notFirst") { display = "notFirst" }
+            }
         }
         PrimaryButton("Apply") {
             val c = if (color.length == 6) color else "000000"
@@ -412,8 +425,8 @@ fun PageBordersSheet(d: Dispatcher, onDismiss: () -> Unit) {
                 "design.pageBorders",
                 when {
                     sides.isEmpty() -> mapOf("kind" to "none", "applyTo" to applyTo)
-                    sides.size == 4 -> mapOf("kind" to "box", "style" to style, "width" to width, "color" to c, "applyTo" to applyTo)
-                    else -> mapOf("sides" to sides.associateWith { line }, "applyTo" to applyTo)
+                    sides.size == 4 -> mapOf("kind" to "box", "style" to style, "width" to width, "color" to c, "applyTo" to applyTo, "display" to display)
+                    else -> mapOf("sides" to sides.associateWith { line }, "applyTo" to applyTo, "display" to display)
                 },
             )
             onDismiss()

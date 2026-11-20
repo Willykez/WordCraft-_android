@@ -89,7 +89,11 @@ fn sectpr_body(w: &mut W, s: &SectionProps) {
         );
         paper_source(w, s);
         if let Some(b) = &s.page_borders {
-            borders(w, "w:pgBorders", b, None, &[("w:offsetFrom", "text")]);
+            let mut attrs: Vec<(&str, &str)> = vec![("w:offsetFrom", "text")];
+            if let Some(display) = s.page_border_display.ooxml() {
+                attrs.insert(0, ("w:display", display));
+            }
+            borders(w, "w:pgBorders", b, None, &attrs);
         }
         if let Some(l) = &s.line_numbers {
             let restart = match l.restart {

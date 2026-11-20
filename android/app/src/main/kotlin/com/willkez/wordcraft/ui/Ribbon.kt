@@ -16,6 +16,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.willkez.wordcraft.editor.EditorUiState
@@ -40,7 +43,9 @@ private val CURATED: Map<String, Set<String>> = mapOf(
 /** The ribbon body for one tab: Home, Insert and Layout are hand-laid-out; the rest is built from the engine's registry. */
 @Composable
 fun RibbonBody(ui: EditorUiState, tab: String, d: Dispatcher) {
-    Surface(color = RibbonBg, contentColor = RibbonInk, shadowElevation = 2.dp) {
+    val accent = tabColor(tab)
+    Surface(color = tint(accent), contentColor = RibbonInk, shadowElevation = 2.dp) {
+      CompositionLocalProvider(LocalAccent provides accent) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp)) {
             when (tab) {
                 "Home" -> HomeGroups(ui, d)
@@ -55,6 +60,7 @@ fun RibbonBody(ui: EditorUiState, tab: String, d: Dispatcher) {
             val skip = CURATED[tab].orEmpty()
             ui.ribbon?.groups(tab)?.filter { it.name !in skip }?.forEach { g -> GenericGroup(g, ui, d) }
         }
+      }
     }
 }
 
@@ -95,7 +101,7 @@ private fun CmdButton(c: Cmd, ui: EditorUiState, d: Dispatcher, big: Boolean) {
     if (big) {
         RBtn(c.label, iconFor(c.id), enabled, active = on == true, cmd = c) { action() }
     } else {
-        val ink = if (enabled) RibbonInk else RibbonInk.copy(alpha = 0.35f)
+        val ink = if (enabled) LocalAccent.current else RibbonInk.copy(alpha = 0.35f)
         Row(
             Modifier.height(30.dp).widthIn(min = 92.dp, max = 138.dp).padding(vertical = 1.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(5.dp))
                 .background(if (on == true) WordBlue.copy(alpha = 0.22f) else Color.Transparent)
@@ -264,14 +270,22 @@ fun HighlightMenu(enabled: Boolean, current: String?, onPick: (String) -> Unit) 
             Box(Modifier.padding(bottom = 2.dp).width(16.dp).height(3.dp).background(bar))
         }
         DropdownMenu(open, { open = false }, Modifier.heightIn(max = 400.dp)) {
-            HIGHLIGHTS.forEach { (name, label, argb) ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    leadingIcon = { Box(Modifier.size(18.dp).background(Color(argb), CircleShape).border(1.dp, Color.Gray, CircleShape)) },
-                    onClick = { open = false; onPick(name) },
-                )
+            Column(Modifier.width(236.dp).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                // The engine takes Word's 15 named highlighters; a swatch grid shows them all at once.
+                HIGHLIGHTS.chunked(5).forEach { row ->
+                    Row(Modifier.padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { (name, label, argb) ->
+                            Box(
+                                Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).background(Color(argb))
+                                    .border(if (name.equals(current, true)) 3.dp else 1.dp, if (name.equals(current, true)) WordBlue else Color(0x55000000), RoundedCornerShape(8.dp))
+                                    .semantics { contentDescription = label }
+                                    .clickable { open = false; onPick(name) },
+                            )
+                        }
+                    }
+                }
+                TextButton({ open = false; onPick("none") }) { Text("No colour") }
             }
-            DropdownMenuItem(text = { Text("No color") }, onClick = { open = false; onPick("none") })
         }
     }
 }
@@ -279,6 +293,7 @@ fun HighlightMenu(enabled: Boolean, current: String?, onPick: (String) -> Unit) 
 /** A colour button with Word's colour bar under the icon showing the current value. */
 @Composable
 fun ColorMenu(label: String, icon: ImageVector, enabled: Boolean, current: String? = null, fallbackBar: Color? = null, onPick: (String) -> Unit) {
+    val autoLabel = if (label.contains("Page", ignoreCase = true)) "No colour" else "Automatic"
     var open by remember { mutableStateOf(false) }
     val bar = hexColor(current) ?: fallbackBar
     Box {
@@ -286,16 +301,8 @@ fun ColorMenu(label: String, icon: ImageVector, enabled: Boolean, current: Strin
             MiniToggle(icon, label, false, enabled) { open = true }
             if (bar != null) Box(Modifier.padding(bottom = 2.dp).width(16.dp).height(3.dp).background(bar))
         }
-        DropdownMenu(open, { open = false }, Modifier.heightIn(max = 400.dp)) {
-            PALETTE.forEach { (hex, name) ->
-                DropdownMenuItem(
-                    text = { Text(name) },
-                    leadingIcon = {
-                        Box(Modifier.size(18.dp).background(hexColor(hex) ?: Color.Transparent, CircleShape).border(1.dp, Color.Gray, CircleShape))
-                    },
-                    onClick = { open = false; onPick(hex) },
-                )
-            }
+        DropdownMenu(open, { open = false }, Modifier.heightIn(max = 520.dp)) {
+            ColorChooser(autoLabel) { open = false; onPick(it) }
         }
     }
 }

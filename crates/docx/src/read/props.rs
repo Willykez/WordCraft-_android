@@ -809,7 +809,10 @@ pub fn sectpr(pc: &PropCtx, e: &El) -> (SectionProps, Vec<HfRef>) {
                     _ => PageVAlign::Top,
                 }
             }
-            "w:pgBorders" => s.page_borders = Some(pc.borders(k)),
+            "w:pgBorders" => {
+                s.page_borders = Some(pc.borders(k));
+                s.page_border_display = wordcraft_doc::section::PageBorderDisplay::from_ooxml(k.attr("w:display"));
+            }
             "w:docGrid" => {
                 let mut g = DocGrid::default();
                 if let Some(t) = k.attr("w:type").and_then(DocGridType::from_ooxml) {
