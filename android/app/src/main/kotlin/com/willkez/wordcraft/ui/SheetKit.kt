@@ -1,5 +1,9 @@
 package com.willkez.wordcraft.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -10,7 +14,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -107,7 +113,27 @@ fun PillRow(content: @Composable FlowRowScope.() -> Unit) {
 /** A row of colour swatches, [selected] drawn with a highlight ring (sheet call order: selected, then the list). */
 @Composable
 fun SwatchRow(selected: String?, colors: List<String>, onPick: (String) -> Unit) {
-    SwatchRow(colors, selected, onPick)
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        colors.forEach { hex ->
+            val swatchColor = parseHex(hex) ?: Color.LightGray
+            val isSelected = selected.equals(hex, ignoreCase = true)
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .background(swatchColor, CircleShape)
+                    .border(
+                        width = if (isSelected) 3.dp else 1.dp,
+                        color = if (isSelected) WordBlue else Color(0xFFBBBBBB),
+                        shape = CircleShape,
+                    )
+                    .clickable { onPick(hex) },
+            )
+        }
+    }
 }
 
 /** Free-typed hex colour, in case none of the swatches is the right one. */
