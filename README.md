@@ -142,7 +142,7 @@ Make sure the Android SDK and NDK are installed and that your environment expose
 ### 2. Clone the repository
 
 ```bash
-git clone https://github.com/storytold/wordcraft.git
+git clone https://github.com/Willykez/WordCraft-_android.git
 cd wordcraft
 ```
 
