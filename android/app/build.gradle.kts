@@ -8,20 +8,63 @@ plugins {
 val devBuild = providers.gradleProperty("devBuild").map { it.toBoolean() }.orElse(false).get()
 val abis = if (devBuild) listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64")
 
+// ---- Release signing ----------------------------------------------------------------------
+// Real secrets never live in this file or in git. Locally, copy keystore.properties.example to
+// keystore.properties (already in .gitignore) and fill it in; in CI, set the four WORDCRAFT_*
+// env vars instead (e.g. from repo secrets) and write the keystore file out before the build.
+// Neither present -> releaseSigning stays null and the release build falls back to the debug
+// key, so `assembleRelease` still works locally without any of this set up.
+data class ReleaseSigning(val storeFile: File, val storePassword: String, val keyAlias: String, val keyPassword: String)
+
+val keystorePropsFile = rootProject.layout.projectDirectory.file("keystore.properties").asFile
+val releaseSigning: ReleaseSigning? = if (keystorePropsFile.exists()) {
+    val props = java.util.Properties().apply { keystorePropsFile.inputStream().use { load(it) } }
+    fun need(k: String) = props.getProperty(k) ?: throw GradleException("keystore.properties is missing \"$k\"")
+    ReleaseSigning(rootProject.layout.projectDirectory.file(need("storeFile")).asFile, need("storePassword"), need("keyAlias"), need("keyPassword"))
+} else {
+    val storeFilePath = System.getenv("WORDCRAFT_KEYSTORE_FILE")
+    val storePassword = System.getenv("WORDCRAFT_KEYSTORE_PASSWORD")
+    val keyAlias = System.getenv("WORDCRAFT_KEY_ALIAS")
+    val keyPassword = System.getenv("WORDCRAFT_KEY_PASSWORD")
+    if (storeFilePath != null && storePassword != null && keyAlias != null && keyPassword != null) {
+        ReleaseSigning(File(storeFilePath), storePassword, keyAlias, keyPassword)
+    } else {
+        null
+    }
+}
+if (releaseSigning == null) {
+    logger.lifecycle("No release signing configured (no keystore.properties and no WORDCRAFT_* env vars) — release builds will be signed with the debug key.")
+}
+
 android {
-    namespace = "org.wordcraft.android"
+    namespace = "com.willkez.wordcraft"
     compileSdk = 35
     ndkVersion = "27.2.12479018" // keep in sync with NDK_VERSION in .github/workflows/android.yml
     defaultConfig {
-        applicationId = "org.wordcraft.android"
+        applicationId = "com.willkez.wordcraft"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
         ndk { abiFilters += abis }
     }
+    signingConfigs {
+        if (releaseSigning != null) {
+            create("release") {
+                storeFile = releaseSigning.storeFile
+                storePassword = releaseSigning.storePassword
+                keyAlias = releaseSigning.keyAlias
+                keyPassword = releaseSigning.keyPassword
+            }
+        }
+    }
     buildTypes {
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = if (releaseSigning != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -65,7 +108,7 @@ val uniffiBindgen = tasks.register<Exec>("uniffiBindgen") {
     commandLine(
         "cargo", "run", "--release", "--bin", "uniffi-bindgen", "--",
         "generate", "--library", File(jniLibs, "arm64-v8a/libwordcraft_android.so").path,
-        "--config", File(rustDir, "uniffi.toml").path, // pins package_name = org.wordcraft.bridge
+        "--config", File(rustDir, "uniffi.toml").path, // pins package_name = com.willkez.wordcraft.bridge
         "--language", "kotlin", "--out-dir", bindingsDir.path,
     )
     outputs.dir(bindingsDir)

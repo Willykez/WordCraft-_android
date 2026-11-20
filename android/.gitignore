@@ -3,3 +3,8 @@ build/
 app/src/main/jniLibs/
 .gradle/
 local.properties
+
+# Release signing: never commit the real keystore or its credentials.
+keystore.properties
+*.jks
+*.keystore

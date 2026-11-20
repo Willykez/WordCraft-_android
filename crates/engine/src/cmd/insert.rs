@@ -89,6 +89,10 @@ pub fn specs() -> Vec<CommandSpec> {
             s.sel = back.unwrap_or_else(|| Selection::caret(s.doc.start_of(StoryRef::Body)));
             sel_result(s)
         })
+        // Without this, the command (and the "Close header & footer" button the app shows
+        // whenever it's enabled) was always enabled, so the button never went away after
+        // leaving the header/footer: it only belongs on screen while the caret is in one.
+        .when(|s| (!s.in_header_footer()).then_some("the caret isn't in a header or footer"))
         .pure(),
         CommandSpec::new("insert.removeEmptyHeaders", "Close Header and Footer", "Header & Footer", |s, _| {
             let ids = new_empty_headers(s);
