@@ -3,7 +3,10 @@ package com.willkez.wordcraft.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
@@ -136,7 +139,39 @@ private val EXTRA_ICONS: Map<String, ImageVector> = mapOf(
     "edit.selectAll" to Icons.Default.SelectAll,
 )
 
-val CMD_ICONS: Map<String, ImageVector> = BASE_ICONS + EXTRA_ICONS
+/** Icons for commands that used to show a letter monogram (Insert, Design, Layout, References, File). */
+private val MORE_ICONS: Map<String, ImageVector> = mapOf(
+    "insert.coverPage" to Icons.Default.Article, "insert.blankPage" to Icons.Default.NoteAdd, "insert.pageBreak" to Icons.Default.InsertPageBreak,
+    "insert.icon" to Icons.Default.EmojiSymbols, "insert.chart" to Icons.Default.BarChart, "insert.smartArt" to Icons.Default.AccountTree,
+    "insert.canvas" to Icons.Default.Dashboard, "insert.textBox" to Icons.Default.TextFields, "insert.wordArt" to Icons.Default.FormatShapes,
+    "insert.dateTime" to Icons.Default.Schedule, "insert.equation" to Icons.Default.Functions, "insert.symbol" to Icons.Default.EmojiSymbols,
+    "insert.bookmark" to Icons.Default.Bookmark, "insert.crossReference" to Icons.Default.CompareArrows, "insert.field" to Icons.Default.Code,
+    "insert.quickParts" to Icons.Default.Extension, "insert.dropCap" to Icons.Default.FormatSize, "insert.horizontalLine" to Icons.Default.HorizontalRule,
+    "insert.spreadsheet" to Icons.Default.GridOn, "insert.object" to Icons.Default.Extension, "insert.signatureLine" to Icons.Default.Edit,
+    "review.newComment" to Icons.Default.AddComment, "table.quick" to Icons.Default.TableChart, "table.fromText" to Icons.Default.Transform,
+    "references.toc" to Icons.Default.Toc, "references.updateToc" to Icons.Default.Sync, "references.updateFields" to Icons.Default.Sync,
+    "references.footnote" to Icons.Default.Notes, "references.endnote" to Icons.Default.Notes, "references.nextFootnote" to Icons.Default.ArrowDownward,
+    "references.notes" to Icons.Default.Visibility, "references.citation" to Icons.Default.FormatQuote, "references.bibliography" to Icons.Default.LibraryBooks,
+    "references.sources" to Icons.Default.Storage, "references.caption" to Icons.Default.Title, "references.tableOfFigures" to Icons.Default.ListAlt,
+    "references.markEntry" to Icons.Default.Bookmarks, "references.index" to Icons.Default.ImportContacts, "references.updateIndex" to Icons.Default.Sync,
+    "references.markCitation" to Icons.Default.Gavel, "references.tableOfAuthorities" to Icons.Default.Gavel,
+    "design.theme" to Icons.Default.Palette, "design.styleSet" to Icons.Default.Style, "design.themeColors" to Icons.Default.ColorLens,
+    "design.themeFonts" to Icons.Default.FontDownload, "design.paragraphSpacing" to Icons.Default.FormatLineSpacing, "design.effects" to Icons.Default.AutoAwesome,
+    "design.setDefault" to Icons.Default.CheckCircle, "design.watermark" to Icons.Default.BrandingWatermark, "design.pageColor" to Icons.Default.FormatColorFill,
+    "layout.lineNumbers" to Icons.Default.FormatListNumbered, "layout.hyphenation" to Icons.Default.TextFormat, "layout.pageSetup" to Icons.Default.Settings,
+    "layout.verticalAlign" to Icons.Default.VerticalAlignCenter, "layout.margins" to Icons.Default.BorderOuter, "layout.size" to Icons.Default.Description,
+    "layout.orientation" to Icons.Default.ScreenRotation, "layout.columns" to Icons.Default.ViewColumn, "layout.break" to Icons.Default.InsertPageBreak,
+    "arrange.position" to Icons.Default.PictureInPicture, "arrange.wrap" to Icons.Default.WrapText, "arrange.bringForward" to Icons.Default.FlipToFront,
+    "arrange.sendBackward" to Icons.Default.FlipToBack, "arrange.selectionPane" to Icons.Default.Layers, "arrange.align" to Icons.Default.AlignHorizontalLeft,
+    "arrange.group" to Icons.Default.Group, "arrange.rotate" to Icons.Default.RotateRight,
+    "file.new" to Icons.Default.NoteAdd, "file.open" to Icons.Default.FolderOpen, "file.save" to Icons.Default.Save, "file.print" to Icons.Default.Print,
+    "file.share" to Icons.Default.Share, "file.protect" to Icons.Default.Lock, "file.inspect" to Icons.Default.FindInPage, "file.accessibility" to Icons.Default.Accessibility,
+    "file.versions" to Icons.Default.History, "file.recover" to Icons.Default.Restore, "file.options" to Icons.Default.Settings,
+    "select.all" to Icons.Default.SelectAll, "select.objects" to Icons.Default.NearMe, "select.similar" to Icons.Default.HighlightAlt,
+    "edit.goto" to Icons.Default.Input, "edit.findNext" to Icons.Default.ArrowDownward, "edit.findPrevious" to Icons.Default.ArrowUpward,
+)
+
+val CMD_ICONS: Map<String, ImageVector> = BASE_ICONS + EXTRA_ICONS + MORE_ICONS
 
 /** An icon for a command: a specific one, else a family icon (mailings, developer controls). */
 fun iconFor(id: String): ImageVector? = CMD_ICONS[id] ?: when {
@@ -152,8 +187,9 @@ fun CmdIcon(cmd: Cmd?, label: String, tint: Color, size: Int = 24) {
         Icon(icon, label, tint = tint, modifier = Modifier.size(size.dp))
     } else {
         val letters = label.split(' ', '&', '/', '-').filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1).uppercase() }.ifEmpty { "?" }
-        Box(Modifier.size(size.dp).clip(RoundedCornerShape(6.dp)).background(tint.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-            Text(letters, color = tint, fontSize = (size * 0.42f).sp, fontWeight = FontWeight.SemiBold)
+        // No glyph for this command: a plain outlined monogram, not a filled chip.
+        Box(Modifier.size(size.dp).border(1.dp, tint.copy(alpha = 0.55f), RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) {
+            Text(letters, color = tint, fontSize = (size * 0.40f).sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -161,10 +197,10 @@ fun CmdIcon(cmd: Cmd?, label: String, tint: Color, size: Int = 24) {
 /** A ribbon button: icon over a short label. */
 @Composable
 fun RBtn(label: String, icon: ImageVector?, enabled: Boolean = true, active: Boolean = false, cmd: Cmd? = null, onClick: () -> Unit) {
-    val ink = if (enabled) LocalAccent.current else RibbonInk.copy(alpha = 0.35f)
+    val ink = if (enabled) RibbonIcon else RibbonInk.copy(alpha = 0.35f)
     Column(
-        Modifier.widthIn(min = 52.dp, max = 72.dp).padding(horizontal = 2.dp).clip(RoundedCornerShape(6.dp))
-            .background(if (active) WordBlue.copy(alpha = 0.22f) else Color.Transparent)
+        Modifier.widthIn(min = 52.dp, max = 72.dp).padding(horizontal = 1.dp).clip(RoundedCornerShape(3.dp))
+            .background(if (active) WordBlue.copy(alpha = 0.18f) else Color.Transparent)
             .clickable(enabled = enabled, onClick = onClick).padding(vertical = 4.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -201,7 +237,7 @@ fun Combo(value: String, width: Int, entries: List<MenuEntry>) {
     var open by remember { mutableStateOf(false) }
     Box {
         Row(
-            Modifier.width(width.dp).height(30.dp).clip(RoundedCornerShape(4.dp)).background(Color.White)
+            Modifier.width(width.dp).height(28.dp).background(Color.White).border(1.dp, Color(0xFFBDBDBD), RoundedCornerShape(2.dp))
                 .clickable { open = true }.padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -217,9 +253,9 @@ fun Combo(value: String, width: Int, entries: List<MenuEntry>) {
 /** A small square toggle (bold, italic, …). */
 @Composable
 fun MiniToggle(icon: ImageVector, label: String, active: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
-    val ink = if (enabled) LocalAccent.current else RibbonInk.copy(alpha = 0.35f)
+    val ink = if (enabled) RibbonIcon else RibbonInk.copy(alpha = 0.35f)
     Box(
-        Modifier.size(30.dp).clip(RoundedCornerShape(4.dp)).background(if (active) LocalAccent.current.copy(alpha = 0.30f) else Color.Transparent)
+        Modifier.size(30.dp).clip(RoundedCornerShape(3.dp)).background(if (active) LocalAccent.current.copy(alpha = 0.20f) else Color.Transparent)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, label, Modifier.size(20.dp), tint = ink) }
@@ -231,9 +267,9 @@ fun GroupBox(title: String, content: @Composable () -> Unit) {
     Row(Modifier.height(IntrinsicSize.Min)) {
         Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(Modifier.heightIn(min = 60.dp), verticalAlignment = Alignment.CenterVertically) { content() }
-            Text(title, fontSize = 10.sp, color = accent, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(title, fontSize = 10.sp, color = Color(0xFF666666), maxLines = 1)
         }
-        VerticalDivider(Modifier.padding(vertical = 6.dp), color = accent.copy(alpha = 0.35f))
+        VerticalDivider(Modifier.padding(vertical = 6.dp), color = RibbonLine)
     }
 }
 
@@ -257,7 +293,7 @@ fun MiniMenu(icon: ImageVector, label: String, enabled: Boolean = true, entries:
             Modifier.height(30.dp).clip(RoundedCornerShape(4.dp)).clickable(enabled = enabled) { open = true }.padding(start = 5.dp, end = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val ink = if (enabled) LocalAccent.current else RibbonInk.copy(alpha = 0.35f)
+            val ink = if (enabled) RibbonIcon else RibbonInk.copy(alpha = 0.35f)
             Icon(icon, label, Modifier.size(20.dp), tint = ink)
             Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(13.dp), tint = ink)
         }
@@ -281,7 +317,7 @@ fun SplitMini(icon: ImageVector, label: String, active: Boolean, enabled: Boolea
         MiniToggle(icon, label, active, enabled, onClick)
         Box {
             Box(Modifier.width(14.dp).height(30.dp).clickable(enabled = enabled) { open = true }, contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.KeyboardArrowDown, "$label options", Modifier.size(14.dp), tint = if (enabled) LocalAccent.current else RibbonInk.copy(alpha = 0.35f))
+                Icon(Icons.Default.KeyboardArrowDown, "$label options", Modifier.size(14.dp), tint = if (enabled) RibbonIcon else RibbonInk.copy(alpha = 0.35f))
             }
             DropdownMenu(open, { open = false }, Modifier.heightIn(max = 400.dp)) {
                 entries.forEach { e -> DropdownMenuItem(text = { Text(e.label) }, enabled = e.enabled, onClick = { open = false; e.onClick() }) }
@@ -290,27 +326,117 @@ fun SplitMini(icon: ImageVector, label: String, active: Boolean, enabled: Boolea
     }
 }
 
-/** Insert Table: press and slide over the grid to size it, as in Word. */
+/** Insert Table: press and slide over the grid to size it (release to insert), or open the dialog for any size. */
 @Composable
-fun TableGridBtn(enabled: Boolean, onPick: (rows: Int, cols: Int) -> Unit) {
+fun TableGridBtn(enabled: Boolean, onDialog: () -> Unit = {}, onPick: (rows: Int, cols: Int) -> Unit) {
     var open by remember { mutableStateOf(false) }
     var hr by remember { mutableIntStateOf(0) }
     var hc by remember { mutableIntStateOf(0) }
+    val cell = 24.dp
     Box {
         RBtn("Table ▾", Icons.Default.TableChart, enabled) { hr = 0; hc = 0; open = true }
         DropdownMenu(open, { open = false }) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                Text(if (hr > 0) "$hc × $hr table" else "Insert table", fontSize = 12.sp, color = Color.Gray)
+                Text(if (hr > 0) "$hc × $hr table" else "Slide to size, release to insert", fontSize = 12.sp, color = Color.Gray)
                 Spacer(Modifier.height(6.dp))
-                for (r in 1..8) Row {
-                    for (c in 1..10) Box(
-                        Modifier.padding(1.dp).size(22.dp)
-                            .background(if (r <= hr && c <= hc) WordBlue.copy(alpha = 0.35f) else Color.White)
-                            .border(1.dp, if (r <= hr && c <= hc) WordBlue else Color(0xFFBBBBBB))
-                            .pointerInput(r, c) {
-                                detectTapGestures(onPress = { hr = r; hc = c; tryAwaitRelease() }, onTap = { open = false; onPick(r, c) })
-                            },
-                    )
+                Box(
+                    Modifier.size(cell * 10, cell * 8).pointerInput(Unit) {
+                        val step = cell.toPx()
+                        fun update(p: androidx.compose.ui.geometry.Offset) {
+                            hc = (p.x / step).toInt().plus(1).coerceIn(1, 10)
+                            hr = (p.y / step).toInt().plus(1).coerceIn(1, 8)
+                        }
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            update(down.position)
+                            while (true) {
+                                val change = awaitPointerEvent().changes.firstOrNull() ?: break
+                                if (change.changedToUp()) {
+                                    if (hr > 0) { open = false; onPick(hr, hc) }
+                                    break
+                                }
+                                update(change.position)
+                                change.consume()
+                            }
+                        }
+                    },
+                ) {
+                    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                        val step = cell.toPx()
+                        for (r in 1..8) for (c in 1..10) {
+                            val lit = r <= hr && c <= hc
+                            val tl = androidx.compose.ui.geometry.Offset((c - 1) * step + 1f, (r - 1) * step + 1f)
+                            val sz = androidx.compose.ui.geometry.Size(step - 2f, step - 2f)
+                            drawRect(if (lit) WordBlue.copy(alpha = 0.35f) else Color.White, tl, sz)
+                            drawRect(if (lit) WordBlue else Color(0xFFBBBBBB), tl, sz, style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f))
+                        }
+                    }
+                }
+                TextButton({ open = false; onDialog() }, Modifier.padding(top = 4.dp)) { Text("Insert table…") }
+            }
+        }
+    }
+}
+
+/** Compact command: small icon beside its name, three to a column (Cut / Copy / Format Painter on the desktop ribbon). */
+@Composable
+fun SmallBtn(label: String, icon: ImageVector, enabled: Boolean = true, active: Boolean = false, onClick: () -> Unit) {
+    val ink = if (enabled) RibbonIcon else RibbonInk.copy(alpha = 0.35f)
+    Row(
+        Modifier.height(28.dp).widthIn(min = 84.dp).clip(RoundedCornerShape(3.dp))
+            .background(if (active) LocalAccent.current.copy(alpha = 0.20f) else Color.Transparent)
+            .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, label, Modifier.size(18.dp), tint = ink)
+        Spacer(Modifier.width(6.dp))
+        Text(label, fontSize = 11.sp, color = ink, maxLines = 1)
+    }
+}
+
+/** Compact command that opens a list (Select ▾). */
+@Composable
+fun SmallMenuBtn(label: String, icon: ImageVector, enabled: Boolean = true, entries: List<MenuEntry>) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        val ink = if (enabled && entries.isNotEmpty()) RibbonIcon else RibbonInk.copy(alpha = 0.35f)
+        Row(
+            Modifier.height(28.dp).widthIn(min = 84.dp).clip(RoundedCornerShape(3.dp))
+                .clickable(enabled = enabled && entries.isNotEmpty()) { open = true }.padding(start = 6.dp, end = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, label, Modifier.size(18.dp), tint = ink)
+            Spacer(Modifier.width(6.dp))
+            Text(label, fontSize = 11.sp, color = ink, maxLines = 1)
+            Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(14.dp), tint = ink)
+        }
+        DropdownMenu(open, { open = false }, Modifier.heightIn(max = 400.dp)) {
+            entries.forEach { e ->
+                DropdownMenuItem(
+                    text = { Text(e.label, fontSize = 14.sp) }, enabled = e.enabled,
+                    trailingIcon = if (e.hint.isNotEmpty()) ({ Text(e.hint, fontSize = 11.sp, color = Color.Gray) }) else null,
+                    onClick = { open = false; e.onClick() },
+                )
+            }
+        }
+    }
+}
+
+/** Big split button, as in Word: the icon does the default thing (Paste), the arrow beneath opens the variants. */
+@Composable
+fun SplitBtn(label: String, icon: ImageVector, enabled: Boolean = true, entries: List<MenuEntry>, onClick: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val ink = if (enabled) RibbonIcon else RibbonInk.copy(alpha = 0.35f)
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 1.dp)) {
+        RBtn(label, icon, enabled, onClick = onClick)
+        Box {
+            Row(
+                Modifier.clip(RoundedCornerShape(3.dp)).clickable(enabled = enabled && entries.isNotEmpty()) { open = true }.padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) { Icon(Icons.Default.KeyboardArrowDown, "$label options", Modifier.size(16.dp), tint = ink) }
+            DropdownMenu(open, { open = false }, Modifier.heightIn(max = 400.dp)) {
+                entries.forEach { e ->
+                    DropdownMenuItem(text = { Text(e.label, fontSize = 14.sp) }, enabled = e.enabled, onClick = { open = false; e.onClick() })
                 }
             }
         }

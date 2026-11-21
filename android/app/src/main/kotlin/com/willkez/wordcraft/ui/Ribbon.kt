@@ -23,7 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.willkez.wordcraft.editor.EditorUiState
 
-val FONTS = listOf("Calibri", "Arial", "Times New Roman", "Georgia", "Verdana", "Courier New", "Cambria", "Consolas", "Segoe UI", "Roboto", "Noto Serif", "Open Sans")
+val FONTS = listOf("Inter", "Roboto", "Noto Serif", "JetBrains Mono", "Aptos", "Calibri", "Arial", "Times New Roman", "Georgia", "Verdana", "Courier New", "Cambria", "Consolas", "Segoe UI", "Roboto", "Noto Serif", "Open Sans")
 val SIZES = listOf(8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72)
 
 private val BULLETS = listOf("Round bullet •" to "bullet", "Circle ○" to "○", "Square ■" to "■", "Arrow ➢" to "➢", "Check ✓" to "✓", "Dash –" to "–")
@@ -35,23 +35,26 @@ private val CASES = listOf("Sentence case" to "sentence", "lowercase" to "lower"
 private val CURATED: Map<String, Set<String>> = mapOf(
     "Home" to setOf("Clipboard", "Font", "Paragraph", "Styles", "Editing"),
     "Insert" to setOf("Pages", "Tables", "Illustrations", "Header & Footer", "Text", "Links", "Symbols"),
-    "Layout" to setOf("Page Setup", "Paragraph"),
-    "Design" to setOf("Page Background"),
-    "Draw" to setOf("Tools", "Pens"),
+    "Layout" to setOf("Page Setup", "Paragraph", "Arrange"),
+    "Design" to setOf("Page Background", "Document Formatting"),
+    // Draw › Insert only holds Drawing Canvas, which Insert › Illustrations already has.
+    "Draw" to setOf("Tools", "Pens", "Insert"),
+    "References" to setOf("Table of Contents", "Footnotes", "Captions", "Index"),
 ) + CONTEXT_CURATED
 
 /** The ribbon body for one tab: Home, Insert and Layout are hand-laid-out; the rest is built from the engine's registry. */
 @Composable
 fun RibbonBody(ui: EditorUiState, tab: String, d: Dispatcher) {
-    val accent = tabColor(tab)
-    Surface(color = tint(accent), contentColor = RibbonInk, shadowElevation = 2.dp) {
-      CompositionLocalProvider(LocalAccent provides accent) {
+    Surface(color = RibbonPanel, contentColor = RibbonInk) {
+      CompositionLocalProvider(LocalAccent provides WordBlue) {
+       Column {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp)) {
             when (tab) {
                 "Home" -> HomeGroups(ui, d)
                 "Insert" -> InsertGroups(ui, d)
                 "Layout" -> LayoutGroups(ui, d)
                 "Design" -> DesignGroups(ui, d)
+                "References" -> ReferencesGroups(ui, d)
                 "Draw" -> DrawGroups(ui, d)
                 "Table Design" -> TableDesignGroups(ui, d)
                 "Table Layout" -> TableLayoutGroups(ui, d)
@@ -60,6 +63,8 @@ fun RibbonBody(ui: EditorUiState, tab: String, d: Dispatcher) {
             val skip = CURATED[tab].orEmpty()
             ui.ribbon?.groups(tab)?.filter { it.name !in skip }?.forEach { g -> GenericGroup(g, ui, d) }
         }
+        HorizontalDivider(color = RibbonLine)
+       }
       }
     }
 }
@@ -101,7 +106,7 @@ private fun CmdButton(c: Cmd, ui: EditorUiState, d: Dispatcher, big: Boolean) {
     if (big) {
         RBtn(c.label, iconFor(c.id), enabled, active = on == true, cmd = c) { action() }
     } else {
-        val ink = if (enabled) LocalAccent.current else RibbonInk.copy(alpha = 0.35f)
+        val ink = if (enabled) RibbonIcon else RibbonInk.copy(alpha = 0.35f)
         Row(
             Modifier.height(30.dp).widthIn(min = 92.dp, max = 138.dp).padding(vertical = 1.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(5.dp))
                 .background(if (on == true) WordBlue.copy(alpha = 0.22f) else Color.Transparent)
@@ -132,19 +137,32 @@ private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
     fun on(id: String) = ui.isEnabled(id)
 
     // ---- Clipboard
+    // Everything that moves or picks text lives together: paste variants, cut/copy/format, and all the Select commands.
     GroupBox("Clipboard") {
-        MenuBtn(
-            "Paste", Icons.Default.ContentPaste,
-            listOf("edit.paste", "edit.pasteText", "edit.pasteMerge", "edit.pasteSpecial").mapNotNull { ui.ribbon?.byId?.get(it) }.map { it.entry(ui, d) }.ifEmpty { listOf(MenuEntry("Paste") { d.id("edit.paste") }) },
-        )
+        SplitBtn(
+            "Paste", Icons.Default.ContentPaste, on("edit.paste"),
+            listOf(
+                MenuEntry("Paste", on("edit.paste")) { d.id("edit.paste") },
+                MenuEntry("Keep text only", on("edit.pasteText")) { d.id("edit.pasteText") },
+                MenuEntry("Merge formatting", on("edit.pasteMerge")) { d.id("edit.pasteMerge") },
+                MenuEntry("Clipboard pane") { d.id("edit.clipboardPane") },
+            ),
+        ) { d.id("edit.paste") }
         Column {
-            Row {
-                Tool(ui, d, "edit.cut", "Cut", Icons.Default.ContentCut)
-                Tool(ui, d, "edit.copy", "Copy", Icons.Default.ContentCopy)
-            }
-            Row { Tool(ui, d, "edit.formatPainter", "Format Painter", Icons.Default.FormatPaint) }
+            SmallBtn("Cut", Icons.Default.ContentCut, on("edit.cut")) { d.id("edit.cut") }
+            SmallBtn("Copy", Icons.Default.ContentCopy, on("edit.copy")) { d.id("edit.copy") }
+            SmallBtn("Format", Icons.Default.FormatPaint, on("edit.formatPainter")) { d.id("edit.formatPainter") }
         }
-        MoreMenu("Home", "Clipboard", setOf("edit.paste", "edit.pasteText", "edit.pasteMerge", "edit.pasteSpecial", "edit.cut", "edit.copy", "edit.formatPainter"), ui, d)
+        Column {
+            SmallBtn("Select all", Icons.Default.SelectAll, on("select.all")) { d.id("select.all") }
+            SmallMenuBtn("Select", Icons.Default.HighlightAlt, true, selectEntries(ui, d))
+            SmallBtn("Clipboard", Icons.Default.Assignment, on("edit.clipboardPane")) { d.id("edit.clipboardPane") }
+        }
+        MoreMenu(
+            "Home", "Clipboard",
+            setOf("edit.paste", "edit.pasteText", "edit.pasteMerge", "edit.pasteSpecial", "edit.cut", "edit.copy", "edit.formatPainter", "edit.clipboardPane", "select.all", "select.objects", "select.similar"),
+            ui, d,
+        )
     }
 
     // ---- Font
@@ -214,7 +232,9 @@ private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
 
     // ---- Styles gallery: Word-style tiles
     GroupBox("Styles") {
-        Row(Modifier.widthIn(max = 286.dp).horizontalScroll(rememberScrollState()).padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.widthIn(max = 300.dp).background(Color.White).border(1.dp, Color(0xFFC9C9C9), RoundedCornerShape(2.dp)).horizontalScroll(rememberScrollState()),
+        ) {
             styleTiles(ui.styles).forEach { spec ->
                 StyleTile(spec, styleMatches(st?.styleName, spec)) { d.id("para.style", mapOf("style" to spec.id)) }
             }
@@ -227,10 +247,21 @@ private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
     GroupBox("Editing") {
         RBtn("Find", Icons.Default.Search, on("edit.find")) { d.id("edit.find") }
         RBtn("Replace", Icons.Default.FindReplace, on("edit.replace")) { d.id("edit.replace") }
-        val select = ui.ribbon?.tabCmds("Home").orEmpty().filter { it.sub == "Select" }
-        if (select.isNotEmpty()) MenuBtn("Select", Icons.Default.SelectAll, select.map { it.entry(ui, d) })
-        MoreMenu("Home", "Editing", setOf("edit.find", "edit.replace") + select.map { it.id }, ui, d)
+        // Select (all / objects / similar) moved to Clipboard; Home's catalog lists those under Editing too, so they stay out of More.
+        MoreMenu("Home", "Editing", setOf("edit.find", "edit.replace", "select.all", "select.objects", "select.similar"), ui, d)
     }
+}
+
+/** Every way to select: the whole document, objects, similar formatting, and (in a table) a cell, row, column or the table. */
+internal fun selectEntries(ui: EditorUiState, d: Dispatcher): List<MenuEntry> {
+    fun on(id: String) = ui.isEnabled(id)
+    val base = listOf(
+        MenuEntry("Select all", on("select.all")) { d.id("select.all") },
+        MenuEntry("Select objects", on("select.objects")) { d.id("select.objects") },
+        MenuEntry("Select text with similar formatting", on("select.similar")) { d.id("select.similar") },
+    )
+    val inTable = ui.state?.inTable == true
+    return if (!inTable) base else base + tableSelectEntries(d)
 }
 
 /** Word's Line and Paragraph Spacing menu: multiples plus space before/after the paragraph. */

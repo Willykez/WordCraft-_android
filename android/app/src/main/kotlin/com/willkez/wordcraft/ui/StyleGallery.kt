@@ -47,12 +47,13 @@ fun styleMatches(current: String?, spec: StyleSpec): Boolean {
 /** Word's style tile: a sample of the look on white, the name on a grey strip, a blue frame when current. */
 @Composable
 fun StyleTile(spec: StyleSpec, selected: Boolean, width: Int = 86, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(10.dp)
+    // Flat tile inside the gallery strip: no card of its own; the current style gets a thin accent outline.
     Column(
-        Modifier.width(width.dp).clip(shape).background(Color.White)
-            .border(if (selected) 2.dp else 1.dp, if (selected) WordBlue else Color(0xFFD0D5DD), shape).clickable(onClick = onClick),
+        Modifier.width(width.dp).background(Color.White)
+            .then(if (selected) Modifier.border(1.5.dp, WordBlue, RoundedCornerShape(2.dp)) else Modifier)
+            .clickable(onClick = onClick),
     ) {
-        Box(Modifier.fillMaxWidth().height(52.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(46.dp), contentAlignment = Alignment.Center) {
             Text(
                 spec.sample, fontSize = spec.sizeSp.sp, color = spec.color, maxLines = 1,
                 fontWeight = if (spec.bold) FontWeight.Bold else FontWeight.Normal,
@@ -60,9 +61,9 @@ fun StyleTile(spec: StyleSpec, selected: Boolean, width: Int = 86, onClick: () -
             )
         }
         Text(
-            spec.label, Modifier.fillMaxWidth().background(if (selected) Color(0xFFDCE8FA) else Color(0xFFF2F4F7)).padding(vertical = 4.dp),
+            spec.label, Modifier.fillMaxWidth().background(if (selected) Color(0xFFE3ECFA) else Color.White).padding(vertical = 4.dp),
             fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            color = if (selected) WordBlue else Color(0xFF344054),
+            color = if (selected) WordBlue else Color(0xFF555555),
         )
     }
 }

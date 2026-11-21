@@ -3,6 +3,12 @@ package com.willkez.wordcraft.editor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.OpenWith
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -141,6 +147,7 @@ fun TableHandles(
     geo: com.willkez.wordcraft.bridge.TableGeo,
     pxPerPt: Float,
     onDrag: (x: Float, y: Float, toX: Float, toY: Float) -> Unit,
+    onSelect: (kind: String, x: Float, y: Float) -> Unit = { _, _, _ -> },
 ) {
     val density = LocalDensity.current
     val midY = (geo.top + geo.bottom) / 2f
@@ -152,7 +159,7 @@ fun TableHandles(
             var d by remember { mutableFloatStateOf(0f) }
             Box(
                 Modifier
-                    .offset { IntOffset(((cx + d) * pxPerPt - with(density) { 14.dp.toPx() }).roundToInt(), (geo.top * pxPerPt - with(density) { 26.dp.toPx() }).roundToInt()) }
+                    .offset { IntOffset(((cx + d) * pxPerPt - with(density) { 14.dp.toPx() }).roundToInt(), (geo.top * pxPerPt - with(density) { 50.dp.toPx() }).roundToInt()) }
                     .size(28.dp, 24.dp)
                     .pointerInput(geo, i) {
                         detectDragGestures(onDragEnd = { val moved = d; d = 0f; if (moved != 0f) onDrag(cx, midY, cx + moved, midY) }, onDragCancel = { d = 0f }) { c, drag ->
@@ -180,7 +187,7 @@ fun TableHandles(
             val left = geo.cols.firstOrNull() ?: 0f
             Box(
                 Modifier
-                    .offset { IntOffset((left * pxPerPt - with(density) { 24.dp.toPx() }).roundToInt(), ((by + d) * pxPerPt - with(density) { 12.dp.toPx() }).roundToInt()) }
+                    .offset { IntOffset((left * pxPerPt - with(density) { 46.dp.toPx() }).roundToInt().coerceAtLeast(0), ((by + d) * pxPerPt - with(density) { 12.dp.toPx() }).roundToInt()) }
                     .size(24.dp, 24.dp)
                     .pointerInput(geo, i) {
                         detectDragGestures(onDragEnd = { val moved = d; d = 0f; if (moved != 0f) onDrag(midX, by, midX, by + moved) }, onDragCancel = { d = 0f }) { c, drag ->
@@ -192,6 +199,45 @@ fun TableHandles(
                 Box(Modifier.size(width = 16.dp, height = 8.dp).background(WordBlue, androidx.compose.foundation.shape.RoundedCornerShape(4.dp)))
             }
         }
+    }
+
+    // Selecting: tap a bar above a column or beside a row to select it, or the handle at the top-left to select the whole table.
+    val left0 = geo.cols.firstOrNull() ?: 0f
+    val firstRowBottom = geo.rowBottoms.firstOrNull() ?: geo.bottom
+    val firstCellX = if (geo.cols.size > 1) (geo.cols[0] + geo.cols[1]) / 2f else left0 + 6f
+    val bar = WordBlue.copy(alpha = 0.30f)
+    for (i in 0 until (geo.cols.size - 1).coerceAtLeast(0)) {
+        val x0 = geo.cols[i]; val x1 = geo.cols[i + 1]
+        key(geo, "sc$i") {
+            Box(
+                Modifier
+                    .offset { IntOffset((x0 * pxPerPt + with(density) { 2.dp.toPx() }).roundToInt(), (geo.top * pxPerPt - with(density) { 15.dp.toPx() }).roundToInt()) }
+                    .size(with(density) { ((x1 - x0) * pxPerPt).toDp() - 4.dp }.coerceAtLeast(6.dp), 13.dp)
+                    .clip(RoundedCornerShape(3.dp)).background(bar)
+                    .pointerInput(geo, i) { detectTapGestures(onTap = { onSelect("column", (x0 + x1) / 2f, (geo.top + firstRowBottom) / 2f) }) },
+            )
+        }
+    }
+    geo.rowBottoms.forEachIndexed { j, rowBottom ->
+        val rowTop = if (j == 0) geo.top else geo.rowBottoms[j - 1]
+        key(geo, "sr$j") {
+            Box(
+                Modifier
+                    .offset { IntOffset((left0 * pxPerPt - with(density) { 15.dp.toPx() }).roundToInt().coerceAtLeast(0), (rowTop * pxPerPt + with(density) { 2.dp.toPx() }).roundToInt()) }
+                    .size(13.dp, with(density) { ((rowBottom - rowTop) * pxPerPt).toDp() - 4.dp }.coerceAtLeast(6.dp))
+                    .clip(RoundedCornerShape(3.dp)).background(bar)
+                    .pointerInput(geo, j) { detectTapGestures(onTap = { onSelect("row", firstCellX, (rowTop + rowBottom) / 2f) }) },
+            )
+        }
+    }
+    key(geo, "selTable") {
+        Box(
+            Modifier
+                .offset { IntOffset((left0 * pxPerPt - with(density) { 32.dp.toPx() }).roundToInt().coerceAtLeast(0), (geo.top * pxPerPt - with(density) { 30.dp.toPx() }).roundToInt()) }
+                .size(26.dp).clip(RoundedCornerShape(5.dp)).background(WordBlue)
+                .pointerInput(geo) { detectTapGestures(onTap = { onSelect("table", firstCellX, (geo.top + firstRowBottom) / 2f) }) },
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Default.OpenWith, "Select table", Modifier.size(16.dp), tint = Color.White) }
     }
 
     // Corner: scales the whole table.

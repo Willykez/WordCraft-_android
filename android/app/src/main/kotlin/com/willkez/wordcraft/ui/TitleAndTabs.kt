@@ -31,7 +31,7 @@ fun TitleBar(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, actions: Edi
     Surface(color = Color.Transparent, contentColor = Color.White) {
         Row(
             Modifier.fillMaxWidth()
-                .background(Brush.horizontalGradient(ThemeGradient))
+                .background(Brush.horizontalGradient(listOf(WordBlue, WordBlueDark)))
                 .statusBarsPadding().height(48.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -74,21 +74,25 @@ val PANELS = listOf(
 fun RibbonTabs(ui: EditorUiState, tab: String, contextTabs: List<String>, vm: EditorViewModel) {
     val model = ui.ribbon
     val tabs = model?.tabs ?: listOf("Home")
-    Row(Modifier.fillMaxWidth().background(WordBlueDark).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.Bottom) {
-        TabLabel("File", selected = false, color = WordBlue) { vm.showBackstage(true) }
-        tabs.forEach { t -> TabLabel(t, selected = tab == t && ui.ribbonExpanded, color = tabColor(t)) { vm.setTab(t) } }
-        contextTabs.forEach { t -> TabLabel(t, selected = tab == t && ui.ribbonExpanded, color = tabColor(t)) { vm.setTab(t) } }
+    // One plain strip like the desktop app: text tabs, the current one underlined. No chips.
+    Column(Modifier.fillMaxWidth().background(RibbonBg)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+            TabLabel("File", selected = false, color = WordBlue, bold = true) { vm.showBackstage(true) }
+            tabs.forEach { t -> TabLabel(t, selected = tab == t && ui.ribbonExpanded, color = tabColor(t)) { vm.setTab(t) } }
+            contextTabs.forEach { t -> TabLabel(t, selected = tab == t && ui.ribbonExpanded, color = tabColor(t), contextual = true) { vm.setTab(t) } }
+        }
+        HorizontalDivider(color = RibbonLine)
     }
 }
 
 @Composable
-private fun TabLabel(text: String, selected: Boolean, color: Color, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-            .background(if (selected) tint(color) else color)
-            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 9.dp),
-    ) {
-        Text(text, fontSize = 13.sp, maxLines = 1, color = if (selected) color else Color.White,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+private fun TabLabel(text: String, selected: Boolean, color: Color, bold: Boolean = false, contextual: Boolean = false, onClick: () -> Unit) {
+    Box(Modifier.height(36.dp).clickable(onClick = onClick).padding(horizontal = 13.dp), contentAlignment = Alignment.Center) {
+        Text(
+            text, fontSize = 13.sp, maxLines = 1,
+            color = when { selected -> color; contextual -> color; bold -> color; else -> Color(0xFF444444) },
+            fontWeight = if (selected || bold) FontWeight.SemiBold else FontWeight.Normal,
+        )
+        if (selected) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp).background(color))
     }
 }

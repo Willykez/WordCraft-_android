@@ -97,24 +97,51 @@ fun Backstage(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, actions: Ed
                 Text("File", color = Color.White, fontSize = 18.sp)
             }
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
-                BsItem("New", Icons.Default.Description) { go { d.id("file.new") } }
-                BsItem("Open", Icons.Default.FolderOpen) { go(actions::openFile) }
+                // One entry per job, grouped as the desktop File tab groups them. Where two entries did the same
+                // thing (Save as .docx / Save as; Print / Export PDF) there is now one.
+                @Composable fun cmdItem(id: String, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector?) {
+                    if (ui.ribbon?.byId?.containsKey(id) != false) BsItem(label, icon) { go { ui.ribbon?.byId?.get(id)?.let { d(it) } ?: d.id(id) } }
+                }
+                BsSection("Document")
+                BsItem("New", Icons.Default.NoteAdd) { go { d.id("file.new") } }
+                BsItem("Open…", Icons.Default.FolderOpen) { go(actions::openFile) }
+                BsItem("Close document", Icons.Default.Close) { go(actions::close) }
+
+                BsSection("Save")
                 BsItem("Save", Icons.Default.Save) { go(actions::save) }
-                BsItem("Save as Word document (.docx)", Icons.Default.Save) { go { actions.saveCopy("docx") } }
+                BsItem("Save as…", Icons.Default.SaveAs) { go { actions.saveCopy("docx") } }
                 BsItem("Save location…", Icons.Default.FolderSpecial) { go(actions::chooseSaveFolder) }
+
+                BsSection("Export and share")
+                BsItem("Print or export as PDF", Icons.Default.Print) { go { actions.saveCopy("pdf") } }
+                listOf("OpenDocument text (.odt)" to "odt", "Plain text (.txt)" to "txt", "Web page (.html)" to "html")
+                    .forEach { (n, f) -> BsItem(n, Icons.Default.Description) { go { actions.saveCopy(f) } } }
+                BsItem("Share as Word document…", Icons.Default.Share) { go { actions.share("docx") } }
+                BsItem("Share as PDF…", Icons.Default.Share) { go { actions.share("pdf") } }
+
+                BsSection("Info")
+                BsItem("Document info", Icons.Default.Info) { go { vm.openPanel("info") } }
+                cmdItem("file.protect", "Protect document", Icons.Default.Lock)
+                cmdItem("file.inspect", "Inspect document", Icons.Default.FindInPage)
+                cmdItem("file.accessibility", "Check accessibility", Icons.Default.Accessibility)
+                cmdItem("file.compatibility", "Check compatibility", Icons.Default.CheckCircle)
+                cmdItem("file.versions", "Version history", Icons.Default.History)
+
+                BsSection("Settings")
+                cmdItem("file.options", "Options…", Icons.Default.Settings)
                 BsItem("App theme…", Icons.Default.Palette) { go(actions::chooseTheme) }
                 BsItem("Capitalise sentences while typing: ${if (autoCap) "On" else "Off"}", Icons.Default.TextFields) { vm.setAutoCapitalize(!autoCap) }
-                BsSection("Export")
-                listOf("PDF" to "pdf", "OpenDocument text (.odt)" to "odt", "Plain text (.txt)" to "txt", "Web page (.html)" to "html")
-                    .forEach { (n, f) -> BsItem(n, Icons.Default.Share) { go { actions.saveCopy(f) } } }
-                BsItem("Print (as PDF)", Icons.Default.Print) { go { actions.saveCopy("pdf") } }
-                BsItem("Document info", Icons.Default.Info) { go { vm.openPanel("info") } }
-                BsItem("Close document", Icons.Default.Close) { go(actions::close) }
-                val handled = setOf("file.new", "file.open", "file.save", "file.saveAs", "file.print", "file.close", "file.exportPdf", "file.info", "file.properties", "file.printMarkup")
+
+                // Whatever else the engine lists under File (templates), once, without repeating the entries above.
+                val handled = setOf(
+                    "file.new", "file.open", "file.save", "file.saveAs", "file.print", "file.printMarkup", "file.close", "file.exportPdf", "file.exportPng",
+                    "file.info", "file.properties", "file.options", "file.share", "file.protect", "file.inspect", "file.accessibility", "file.compatibility",
+                    "file.versions", "file.recover",
+                )
                 ui.ribbon?.groups("File").orEmpty().forEach { g ->
                     val cmds = g.cmds.filter { it.id !in handled }
                     if (cmds.isNotEmpty()) {
-                        BsSection(g.name)
+                        BsSection(if (g.name == "Backstage") "Templates" else g.name)
                         cmds.forEach { c -> BsItem(c.label, null, c.shortcut.substringBefore(" / ")) { go { d(c) } } }
                     }
                 }

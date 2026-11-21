@@ -27,7 +27,11 @@ val WordBlue: Color get() = AppTheme.current.primary
 val WordBlueDark: Color get() = AppTheme.current.dark
 val ThemeGradient: List<Color> get() = AppTheme.current.gradient
 val RibbonBg = Color(0xFFF3F3F3)
+/** The flat ribbon surface, its icon ink and the hairlines between groups: neutral, like the desktop app. */
+val RibbonPanel = Color(0xFFFAFAFA)
 val RibbonInk = Color(0xFF222222)
+val RibbonIcon = Color(0xFF3D3D3D)
+val RibbonLine = Color(0xFFDADADA)
 val ContextAccent = Color(0xFFC55A11)
 
 // ---- Rich palette: every tab, group, screen and file type gets its own colour ------------------
@@ -109,6 +113,9 @@ class Dispatcher(val vm: EditorViewModel, private val actions: EditorActions) {
             "edit.copy" -> actions.copy(false)
             "edit.cut" -> actions.copy(true)
             "edit.paste" -> actions.paste()
+            // These two read the engine's own clipboard unless given text, so a copy made in another app was never pasted.
+            "edit.pasteText" -> actions.pasteAs("text")
+            "edit.pasteMerge" -> actions.pasteAs("merge")
             "insert.picture", "insert.pictureFromFile" -> actions.pickPicture()
             "view.zoomIn" -> vm.setZoom(vm.ui.value.zoom * 1.15f)
             "view.zoomOut" -> vm.setZoom(vm.ui.value.zoom / 1.15f)
@@ -134,6 +141,15 @@ class Dispatcher(val vm: EditorViewModel, private val actions: EditorActions) {
             // and table.quick with no kind always inserts the same default table. Routing them
             // to their own sheet is what actually lets the user choose.
             "insert.link" -> vm.openPanel("link")
+            // The engine only asks for these dialogs; the sheets collect the values and run the command with them.
+            "edit.goto" -> vm.openPanel("goto")
+            "layout.pageSetup" -> vm.openPanel("pageSetup")
+            "para.dialog" -> vm.openPanel("paragraph")
+            "file.options" -> vm.openPanel("options")
+            "insert.chart" -> vm.openPanel("chart")
+            "insert.icon" -> vm.openPanel("icons")
+            "insert.smartArt" -> vm.openPanel("smartArt")
+            "references.caption" -> vm.openPanel("caption")
             "table.quick" -> vm.openPanel("quickTables")
             else -> return false
         }

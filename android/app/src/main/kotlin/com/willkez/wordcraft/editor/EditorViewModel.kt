@@ -300,6 +300,18 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) { say("Save failed: ${e.message}") }
     }
 
+    /** Export to a temporary file and hand it to [onFile] (main thread) for sharing. */
+    fun shareFile(format: String, onFile: (java.io.File) -> Unit) = launchEngine {
+        try {
+            val s = session ?: return@launchEngine
+            val name = suggestedName(format)
+            val dir = java.io.File(getApplication<Application>().cacheDir, "share").apply { mkdirs() }
+            val file = java.io.File(dir, name)
+            file.writeBytes(s.export(name))
+            withContext(Dispatchers.Main) { onFile(file) }
+        } catch (e: Exception) { say("Could not prepare the file: ${e.message}") }
+    }
+
     /** A small picture of page 1 for the home screen's recent list. */
     private fun saveThumbnail() {
         val s = session ?: return
@@ -332,10 +344,44 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val s = session ?: return@launchEngine
         try {
             val out = s.execute(command, json)
-            if (refreshAfter) refresh()
+            // Commands run with nothing to go on only *ask* for a dialog; take those requests so the buttons do something.
+            val requests = runCatching { s.takeUiRequests() }.getOrDefault(emptyList())
+            if (refreshAfter) { refresh(); handleUiRequests(requests) }
             if (command.startsWith("styles.")) loadStyles()
             then?.let { withContext(Dispatchers.Main) { it(out) } }
         } catch (e: Exception) { refresh(); say(e.message ?: "Command failed") }
+    }
+
+    /** Actions only the activity can do (file pickers, save, close), set by MainActivity. */
+    var hostRequest: (String) -> Unit = {}
+
+    /** The engine's `{"open": …}` requests: each opens the sheet or panel that asks for the missing input. */
+    private fun handleUiRequests(raw: List<String>) {
+        for (r in raw) {
+            val o = runCatching { JSONObject(r) }.getOrNull() ?: continue
+            val panel = when (o.optString("open")) {
+                "goto" -> "goto"
+                "pageSetup" -> "pageSetup"
+                "paragraph" -> "paragraph"
+                "insertChart" -> "chart"
+                "icons" -> "icons"
+                "options" -> "options"
+                "font" -> "format"
+                "find" -> "find"
+                "zoom" -> "zoom"
+                "manageStyles" -> "styles"
+                "link" -> "link"
+                else -> null
+            }
+            if (panel != null) openPanel(panel)
+            if (o.optString("focus") == "navSearch") openPanel("nav")
+            val host = when {
+                o.optBoolean("close") -> "close"
+                o.optString("open") in setOf("insertPicture", "openFile", "saveAs", "exportPdf", "print", "exportPng") -> o.optString("open")
+                else -> null
+            }
+            if (host != null) viewModelScope.launch(Dispatchers.Main) { hostRequest(host) }
+        }
     }
 
     /** Read-only call for a panel: no refresh, result delivered on the main thread. */
@@ -453,6 +499,34 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         try { session?.paste(systemText); refresh() } catch (e: Exception) { say(e.message ?: "Paste failed") }
     }
 
+    /** Rich paste: the engine reads the HTML; if it cannot, the plain text still goes in. */
+    fun pasteHtml(html: String, text: String) = launchEngine {
+        val s = session ?: return@launchEngine
+        try {
+            // Our own copies come back as plain text identical to the engine clipboard: those keep their exact formatting instead.
+            if (text.isNotEmpty() && s.clipboardText() == text) s.paste(text)
+            else s.execute("edit.paste", JSONObject().put("html", html).toString())
+            refresh()
+        } catch (e: Exception) {
+            try { s.paste(text); refresh() } catch (e2: Exception) { refresh(); say(e2.message ?: "Paste failed") }
+        }
+    }
+
+    /** Paste Keep Text Only (`text`) or Merge Formatting (`merge`) from the system clipboard. */
+    fun pasteVia(mode: String, text: String, html: String?) = launchEngine {
+        val s = session ?: return@launchEngine
+        if (text.isEmpty() && html.isNullOrBlank()) { say("The clipboard is empty"); return@launchEngine }
+        try {
+            val own = text.isNotEmpty() && s.clipboardText() == text // copied inside WordCraft: the engine already holds it
+            val params = JSONObject()
+            if (!own) {
+                if (mode == "merge" && !html.isNullOrBlank()) params.put("html", html) else params.put("text", text)
+            }
+            s.execute(if (mode == "text") "edit.pasteText" else "edit.pasteMerge", params.toString())
+            refresh()
+        } catch (e: Exception) { refresh(); say(e.message ?: "Paste failed") }
+    }
+
     fun insertPicture(bytes: ByteArray) = launchEngine {
         try {
             // 4.5 inches wide is a comfortable default on A4/Letter with normal margins.
@@ -489,6 +563,19 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val issue = if (s.selectedObject() == null) runCatching { JSONObject(s.execute("review.suggestions", "")) }.getOrNull() else null
         if (issue != null) { runCatching { s.execute("select.word", "") }; refresh() }
         _ui.update { it.copy(issue = issue) }
+    }
+
+    /** Select a whole row, column or table from its on-page bar: put the caret in one of its cells, then select. */
+    fun selectTablePart(page: Int, kind: String, x: Float, y: Float) = launchEngine {
+        val s = session ?: return@launchEngine
+        try {
+            s.tap(page.toUInt(), x, y, false)
+            s.execute(
+                when (kind) { "row" -> "table.selectRow"; "column" -> "table.selectColumn"; else -> "table.selectTable" },
+                "",
+            )
+        } catch (e: Exception) { say(e.message ?: "Could not select that part of the table") }
+        refresh()
     }
 
     fun dismissIssue() = _ui.update { it.copy(issue = null) }

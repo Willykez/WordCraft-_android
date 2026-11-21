@@ -78,7 +78,7 @@ fun FloatingPanel(
  * insert link and quick tables are new (they used to fall back to the generic "form" dialog,
  * or in table.quick's case run with no choice of kind at all).
  */
-internal val SHEET_PANEL_IDS = setOf("borders", "pageBorders", "tableFormat", "toc", "link", "quickTables")
+internal val SHEET_PANEL_IDS = setOf("borders", "pageBorders", "tableFormat", "toc", "link", "quickTables", "goto", "pageSetup", "paragraph", "chart", "smartArt", "icons", "options", "insertTable", "caption")
 
 /** Lays the open panels over the page area, back to front. */
 @Composable
@@ -129,6 +129,15 @@ fun SheetHost(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher) {
                 "toc" -> TocSheet(d, onDismiss)
                 "link" -> LinkSheet(vm, d, onDismiss)
                 "quickTables" -> QuickTablesSheet(d, onDismiss)
+                "goto" -> GoToSheet(ui, d, onDismiss)
+                "pageSetup" -> PageSetupSheet(d, onDismiss)
+                "paragraph" -> ParagraphSheet(ui, d, onDismiss)
+                "chart" -> ChartSheet(d, onDismiss)
+                "smartArt" -> SmartArtSheet(d, onDismiss)
+                "icons" -> IconsSheet(vm, d, onDismiss)
+                "options" -> OptionsSheet(d, onDismiss)
+                "insertTable" -> InsertTableSheet(d, onDismiss)
+                "caption" -> CaptionSheet(d, onDismiss)
             }
         }
     }

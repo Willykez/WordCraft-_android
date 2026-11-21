@@ -19,6 +19,16 @@ private val MARGINS = listOf("Normal" to "normal", "Narrow" to "narrow", "Modera
 private val SIZES_PAGE = listOf("Letter", "Legal", "A4", "A3", "A5", "Executive")
 private val BREAKS = listOf("Page" to "page", "Column" to "column", "Text wrapping" to "textWrapping", "Next page (section)" to "nextPage", "Continuous (section)" to "continuous", "Even page (section)" to "evenPage", "Odd page (section)" to "oddPage")
 private val GAPS = listOf(0, 6, 12, 18, 24, 36)
+private val INDENTS = listOf("0\"" to 0, "0.25\"" to 18, "0.5\"" to 36, "0.75\"" to 54, "1\"" to 72)
+private val POSITIONS = listOf(
+    "Top left" to "topLeft", "Top center" to "topCenter", "Top right" to "topRight",
+    "Middle left" to "middleLeft", "Center" to "middleCenter", "Middle right" to "middleRight",
+    "Bottom left" to "bottomLeft", "Bottom center" to "bottomCenter", "Bottom right" to "bottomRight",
+)
+private val THEME_NAMES = listOf("Craft", "Studio", "Gallery", "Atelier", "Darkroom", "Sketchbook")
+private val STYLE_SETS = listOf("Default" to "default", "Basic" to "basic", "Lines" to "lines", "Shaded" to "shaded", "Casual" to "casual", "Centered" to "centered", "Minimalist" to "minimalist", "Title" to "title")
+private val PARA_SPACINGS = listOf("Default" to "default", "None" to "none", "Compact" to "compact", "Tight" to "tight", "Open" to "open", "Relaxed" to "relaxed", "Double" to "double")
+private val FONT_PAIRS = listOf("Georgia" to "Georgia", "Helvetica Neue" to "Helvetica Neue", "Palatino" to "Palatino", "Futura / Avenir Next" to "Futura|Avenir Next", "Gill Sans" to "Gill Sans")
 
 @Composable
 internal fun InsertGroups(ui: EditorUiState, d: Dispatcher) {
@@ -26,18 +36,35 @@ internal fun InsertGroups(ui: EditorUiState, d: Dispatcher) {
     var linkDialog by remember { mutableStateOf(false) }
 
     GroupBox("Pages") {
-        RBtn("Cover page", null, on("insert.coverPage"), cmd = ui.ribbon?.byId?.get("insert.coverPage")) { d.id("insert.coverPage") }
+        RBtn("Cover page", Icons.Default.Article, on("insert.coverPage")) { d.id("insert.coverPage") }
+        RBtn("Blank page", Icons.Default.NoteAdd, on("insert.blankPage")) { d.id("insert.blankPage") }
         RBtn("Page break", Icons.Default.InsertPageBreak, on("insert.pageBreak")) { d.id("insert.pageBreak") }
-        MoreMenu("Insert", "Pages", setOf("insert.coverPage", "insert.pageBreak"), ui, d)
     }
     GroupBox("Tables") {
-        TableGridBtn(on("insert.table")) { r, c -> d.id("insert.table", mapOf("rows" to r, "cols" to c)) }
-        MoreMenu("Insert", "Tables", setOf("insert.table"), ui, d)
+        TableGridBtn(on("insert.table"), onDialog = { d.vm.openPanel("insertTable") }) { r, c -> d.id("insert.table", mapOf("rows" to r, "cols" to c)) }
+        MenuBtn(
+            "More", Icons.Default.MoreHoriz,
+            listOf(
+                MenuEntry("Quick tables…", on("table.quick")) { d.id("table.quick") },
+                MenuEntry("Convert text to table", on("table.fromText")) { d.id("table.fromText") },
+                MenuEntry("Spreadsheet", on("insert.spreadsheet")) { d.id("insert.spreadsheet") },
+            ),
+        )
+        // Draw Table needs a pen stroke on the page (use the Draw tab's table tools), so it is not offered here.
+        MoreMenu("Insert", "Tables", setOf("insert.table", "table.quick", "table.fromText", "insert.spreadsheet", "table.draw"), ui, d)
     }
+    // Illustrations: every item opens something that works on a phone. Each picker collects its own values
+    // (the engine only asks for a dialog when run bare, which used to show nothing or a block of JSON).
     GroupBox("Illustrations") {
-        RBtn("Pictures", Icons.Default.Image, on("insert.picture")) { d.id("insert.picture") }
-        MenuBtn("Shapes", null, SHAPES.map { (n, k) -> MenuEntry(n, on("insert.shape")) { d.id("insert.shape", mapOf("kind" to k)) } }, on("insert.shape"), cmd = ui.ribbon?.byId?.get("insert.shape"))
-        MoreMenu("Insert", "Illustrations", setOf("insert.picture", "insert.shape"), ui, d)
+        SplitBtn(
+            "Pictures", Icons.Default.Image, on("insert.picture"),
+            listOf(MenuEntry("From this device…", on("insert.picture")) { d.id("insert.picture") }, MenuEntry("Drawing canvas", on("insert.canvas")) { d.id("insert.canvas") }),
+        ) { d.id("insert.picture") }
+        ShapeGalleryBtn(on("insert.shape")) { k -> d.id("insert.shape", mapOf("kind" to k)) }
+        RBtn("Icons", Icons.Default.EmojiSymbols, on("insert.icon")) { d.vm.openPanel("icons") }
+        RBtn("SmartArt", Icons.Default.AccountTree, on("insert.smartArt")) { d.vm.openPanel("smartArt") }
+        RBtn("Chart", Icons.Default.BarChart, on("insert.chart")) { d.vm.openPanel("chart") }
+        MoreMenu("Insert", "Illustrations", setOf("insert.picture", "insert.shape", "insert.icon", "insert.smartArt", "insert.chart", "insert.canvas", "insert.onlinePicture", "insert.model3d", "insert.screenshot"), ui, d)
     }
     GroupBox("Links") {
         RBtn("Link", Icons.Default.Link, on("insert.link")) { linkDialog = true }
@@ -61,14 +88,14 @@ internal fun InsertGroups(ui: EditorUiState, d: Dispatcher) {
         MoreMenu("Insert", "Text", setOf("insert.textBox", "insert.dateTime"), ui, d)
     }
     GroupBox("Symbols") {
-        MenuBtn("Symbol", null, SYMBOLS.map { s -> MenuEntry(s) { d.id("insert.symbol", mapOf("char" to s)) } }, on("insert.symbol"), cmd = ui.ribbon?.byId?.get("insert.symbol"))
+        SymbolGalleryBtn(on("insert.symbol"), SYMBOLS) { s -> d.id("insert.symbol", mapOf("char" to s)) }
         RBtn("Equation", null, on("insert.equation"), cmd = ui.ribbon?.byId?.get("insert.equation")) { d.id("insert.equation") }
         MoreMenu("Insert", "Symbols", setOf("insert.symbol", "insert.equation"), ui, d)
     }
 
     if (linkDialog) LinkDialog(onDismiss = { linkDialog = false }) { url, text ->
         linkDialog = false
-        d.id("insert.link", buildMap { put("url", url); if (text.isNotBlank()) put("text", text) })
+        d.id("insert.link", buildMap<String, Any?> { put("url", url); if (text.isNotBlank()) put("text", text) })
     }
 }
 
@@ -103,13 +130,40 @@ internal fun LayoutGroups(ui: EditorUiState, d: Dispatcher) {
             on("layout.columns"),
         )
         MenuBtn("Breaks", null, BREAKS.map { (n, k) -> MenuEntry(n) { d.id("layout.break", mapOf("kind" to k)) } }, on("layout.break"), cmd = ui.ribbon?.byId?.get("layout.break"))
-        MoreMenu("Layout", "Page Setup", setOf("layout.margins", "layout.orientation", "layout.size", "layout.columns", "layout.break"), ui, d)
+        MenuBtn(
+            "Line numbers", Icons.Default.FormatListNumbered,
+            listOf("None" to "none", "Continuous" to "continuous", "Restart each page" to "restartPage", "Restart each section" to "restartSection")
+                .map { (n, k) -> MenuEntry(n, on("layout.lineNumbers")) { d.id("layout.lineNumbers", mapOf("value" to k)) } },
+            on("layout.lineNumbers"),
+        )
+        MenuBtn(
+            "Hyphenation", Icons.Default.TextFormat,
+            listOf(MenuEntry("None", on("layout.hyphenation")) { d.id("layout.hyphenation", mapOf("value" to false)) }, MenuEntry("Automatic", on("layout.hyphenation")) { d.id("layout.hyphenation", mapOf("value" to true)) }),
+            on("layout.hyphenation"),
+        )
+        RBtn("Page setup…", Icons.Default.Settings, on("layout.pageSetup")) { d.vm.openPanel("pageSetup") }
+        MoreMenu("Layout", "Page Setup", setOf("layout.margins", "layout.orientation", "layout.size", "layout.columns", "layout.break", "layout.lineNumbers", "layout.hyphenation", "layout.pageSetup"), ui, d)
     }
     GroupBox("Paragraph") {
-        MenuBtn("Before", null, GAPS.map { g -> MenuEntry("$g pt") { d.id("para.spacing", mapOf("before" to g)) } }, on("para.spacing"), cmd = ui.ribbon?.byId?.get("para.spacing"))
-        MenuBtn("After", null, GAPS.map { g -> MenuEntry("$g pt") { d.id("para.spacing", mapOf("after" to g)) } }, on("para.spacing"), cmd = ui.ribbon?.byId?.get("para.spacing"))
+        MenuBtn("Indent left", Icons.Default.FormatIndentIncrease, INDENTS.map { (n, pt) -> MenuEntry(n) { d.id("para.indents", mapOf("left" to pt)) } }, on("para.indents"))
+        MenuBtn("Indent right", Icons.Default.FormatIndentDecrease, INDENTS.map { (n, pt) -> MenuEntry(n) { d.id("para.indents", mapOf("right" to pt)) } }, on("para.indents"))
+        MenuBtn("Before", Icons.Default.VerticalAlignTop, GAPS.map { g -> MenuEntry("$g pt") { d.id("para.spacing", mapOf("before" to g)) } }, on("para.spacing"))
+        MenuBtn("After", Icons.Default.VerticalAlignBottom, GAPS.map { g -> MenuEntry("$g pt") { d.id("para.spacing", mapOf("after" to g)) } }, on("para.spacing"))
         MenuBtn("Line spacing", Icons.Default.FormatLineSpacing, lineSpacingEntries(d), on("para.lineSpacing"))
-        MoreMenu("Layout", "Paragraph", setOf("para.spacing", "para.lineSpacing"), ui, d)
+        RBtn("Paragraph…", Icons.Default.Settings, on("para.dialog")) { d.vm.openPanel("paragraph") }
+        MoreMenu("Layout", "Paragraph", setOf("para.indents", "para.spacing", "para.lineSpacing", "para.dialog"), ui, d)
+    }
+    // Arrange: the same object commands the Picture/Shape tabs use, in one place, as menus with the choices spelled out.
+    GroupBox("Arrange") {
+        MenuBtn("Position", Icons.Default.PictureInPicture, POSITIONS.map { (n, k) -> MenuEntry(n, on("arrange.position")) { d.id("arrange.position", mapOf("preset" to k)) } }, on("arrange.position"))
+        MenuBtn("Wrap text", Icons.Default.WrapText, wrapEntries(d), on("arrange.wrap"))
+        RBtn("Bring forward", Icons.Default.FlipToFront, on("arrange.bringForward")) { d.id("arrange.bringForward") }
+        RBtn("Send backward", Icons.Default.FlipToBack, on("arrange.sendBackward")) { d.id("arrange.sendBackward") }
+        MenuBtn("Align", Icons.Default.AlignHorizontalLeft, listOf("Left" to "left", "Center" to "center", "Right" to "right").map { (n, k) -> MenuEntry(n, on("arrange.align")) { d.id("arrange.align", mapOf("value" to k)) } }, on("arrange.align"))
+        RBtn("Group", Icons.Default.Group, on("arrange.group")) { d.id("arrange.group") }
+        MenuBtn("Rotate", Icons.Default.RotateRight, rotateEntries(d), on("arrange.rotate"))
+        RBtn("Selection pane", Icons.Default.Layers, on("arrange.selectionPane")) { d.id("arrange.selectionPane") }
+        MoreMenu("Layout", "Arrange", setOf("arrange.position", "arrange.wrap", "arrange.bringForward", "arrange.sendBackward", "arrange.align", "arrange.group", "arrange.rotate", "arrange.selectionPane"), ui, d)
     }
 }
 
@@ -119,6 +173,20 @@ private val WATERMARKS = listOf("CONFIDENTIAL", "DRAFT", "DO NOT COPY", "SAMPLE"
 @Composable
 internal fun DesignGroups(ui: EditorUiState, d: Dispatcher) {
     var watermark by remember { mutableStateOf(false) }
+    fun on(id: String) = ui.isEnabled(id)
+    GroupBox("Document Formatting") {
+        MenuBtn("Themes", Icons.Default.Palette, THEME_NAMES.map { n -> MenuEntry(n, on("design.theme")) { d.id("design.theme", mapOf("name" to n)) } }, on("design.theme"))
+        MenuBtn("Colors", Icons.Default.ColorLens, THEME_NAMES.map { n -> MenuEntry(n, on("design.themeColors")) { d.id("design.themeColors", mapOf("name" to n)) } }, on("design.themeColors"))
+        MenuBtn(
+            "Fonts", Icons.Default.FontDownload,
+            FONT_PAIRS.map { (n, v) -> MenuEntry(n, on("design.themeFonts")) { d.id("design.themeFonts", buildMap<String, Any?> { put("heading", v.substringBefore('|')); put("body", v.substringAfter('|')) }) } },
+            on("design.themeFonts"),
+        )
+        MenuBtn("Style set", Icons.Default.Style, STYLE_SETS.map { (n, k) -> MenuEntry(n, on("design.styleSet")) { d.id("design.styleSet", mapOf("name" to k)) } }, on("design.styleSet"))
+        MenuBtn("Paragraph spacing", Icons.Default.FormatLineSpacing, PARA_SPACINGS.map { (n, k) -> MenuEntry(n, on("design.paragraphSpacing")) { d.id("design.paragraphSpacing", mapOf("value" to k)) } }, on("design.paragraphSpacing"))
+        RBtn("Set as default", Icons.Default.CheckCircle, on("design.setDefault")) { d.id("design.setDefault") }
+        MoreMenu("Design", "Document Formatting", setOf("design.theme", "design.themeColors", "design.themeFonts", "design.styleSet", "design.paragraphSpacing", "design.setDefault"), ui, d)
+    }
     GroupBox("Page Background") {
         MenuBtn(
             "Watermark", null,
@@ -131,5 +199,40 @@ internal fun DesignGroups(ui: EditorUiState, d: Dispatcher) {
     }
     if (watermark) TextPromptDialog("Watermark", "Text", "CONFIDENTIAL", { watermark = false }) {
         watermark = false; d.id("design.watermark", mapOf("text" to it, "diagonal" to true, "color" to "C0C0C0"))
+    }
+}
+
+/** References: contents, notes, captions and the index, each command as a button with a plain action. */
+@Composable
+internal fun ReferencesGroups(ui: EditorUiState, d: Dispatcher) {
+    fun on(id: String) = ui.isEnabled(id)
+    GroupBox("Table of Contents") {
+        RBtn("Table of contents", Icons.Default.Toc, on("references.toc")) { d.id("references.toc") }
+        MenuBtn(
+            "Add text", Icons.Default.Add,
+            listOf("Do not show in table" to 0, "Level 1" to 1, "Level 2" to 2, "Level 3" to 3).map { (n, l) -> MenuEntry(n, on("references.addText")) { d.id("references.addText", mapOf("level" to l)) } },
+            on("references.addText"),
+        )
+        RBtn("Update table", Icons.Default.Sync, on("references.updateToc")) { d.id("references.updateToc") }
+        RBtn("Remove", Icons.Default.Delete, on("references.removeToc")) { d.id("references.removeToc") }
+    }
+    GroupBox("Footnotes") {
+        RBtn("Insert footnote", Icons.Default.Notes, on("references.footnote")) { d.id("references.footnote") }
+        RBtn("Insert endnote", Icons.Default.Notes, on("references.endnote")) { d.id("references.endnote") }
+        RBtn("Next footnote", Icons.Default.ArrowDownward, on("references.nextFootnote")) { d.id("references.nextFootnote") }
+        RBtn("Show notes", Icons.Default.Visibility, on("references.notes")) { d.id("references.notes") }
+        MoreMenu("References", "Footnotes", setOf("references.footnote", "references.endnote", "references.nextFootnote", "references.notes"), ui, d)
+    }
+    GroupBox("Captions") {
+        RBtn("Insert caption", Icons.Default.Title, on("references.caption")) { d.vm.openPanel("caption") }
+        RBtn("Table of figures", Icons.Default.ListAlt, on("references.tableOfFigures")) { d.id("references.tableOfFigures") }
+        RBtn("Update table", Icons.Default.Sync, on("references.updateFigures")) { d.id("references.updateFigures") }
+        MoreMenu("References", "Captions", setOf("references.caption", "references.tableOfFigures", "references.updateFigures"), ui, d)
+    }
+    GroupBox("Index") {
+        RBtn("Mark entry", Icons.Default.Bookmarks, on("references.markEntry")) { d.id("references.markEntry") }
+        RBtn("Insert index", Icons.Default.ImportContacts, on("references.index")) { d.id("references.index") }
+        RBtn("Update index", Icons.Default.Sync, on("references.updateIndex")) { d.id("references.updateIndex") }
+        MoreMenu("References", "Index", setOf("references.markEntry", "references.index", "references.updateIndex"), ui, d)
     }
 }

@@ -35,6 +35,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
@@ -176,9 +177,39 @@ class MainActivity : ComponentActivity() {
             }
             override fun paste() {
                 val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.primaryClip?.getItemAt(0)?.coerceToText(this@MainActivity)?.toString()?.let(vm::paste)
+                val item = cm.primaryClip?.getItemAt(0) ?: return vm.say("The clipboard is empty")
+                val text = item.coerceToText(this@MainActivity)?.toString().orEmpty()
+                // Rich text from a browser or another editor arrives as HTML: keep its formatting.
+                val html = item.htmlText
+                if (!html.isNullOrBlank()) vm.pasteHtml(html, text) else vm.paste(text)
+            }
+            override fun pasteAs(mode: String) {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val item = cm.primaryClip?.getItemAt(0) ?: return vm.say("The clipboard is empty")
+                vm.pasteVia(mode, item.coerceToText(this@MainActivity)?.toString().orEmpty(), item.htmlText)
             }
             override fun close() = vm.requestClose()
+            override fun share(format: String) = vm.shareFile(format) { f ->
+                runCatching {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(this@MainActivity, "$packageName.files", f)
+                    val send = Intent(Intent.ACTION_SEND).setType(DocumentStore.mimeFor(format)).putExtra(Intent.EXTRA_STREAM, uri)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    startActivity(Intent.createChooser(send, "Share ${f.name}"))
+                }.onFailure { vm.say("Nothing to share with") }
+            }
+        }
+
+        SideEffect {
+            vm.hostRequest = { r ->
+                when (r) {
+                    "insertPicture" -> actions.pickPicture()
+                    "openFile" -> actions.openFile()
+                    "saveAs" -> actions.saveCopy("docx")
+                    "exportPdf", "print" -> actions.saveCopy("pdf")
+                    "exportPng" -> vm.say("Export as image isn't available on Android yet")
+                    "close" -> actions.close()
+                }
+            }
         }
 
         if (ui.open) {

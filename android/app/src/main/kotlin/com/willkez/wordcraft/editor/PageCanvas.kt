@@ -674,9 +674,11 @@ private fun PageItem(
         }
 
         if (tableGeo != null && obj == null) {
-            TableHandles(tableGeo, pxPerPt) { x, y, tx, ty ->
-                vm.dragTableBorder(index, x, y, tx, ty)
-            }
+            TableHandles(
+                tableGeo, pxPerPt,
+                onDrag = { x, y, tx, ty -> vm.dragTableBorder(index, x, y, tx, ty) },
+                onSelect = { kind, x, y -> vm.selectTablePart(index, kind, x, y) },
+            )
         }
 
         if (obj != null) {

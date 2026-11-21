@@ -287,6 +287,14 @@ impl MobileSession {
         s.run("edit.paste", &params).map(|_| ()).map_err(fail)
     }
 
+    /// Dialogs and actions the engine asked the front-end for since the last call, each a JSON object
+    /// such as `{"open": "goto"}` or `{"open": "insertChart"}`. The queue is emptied by the call, so
+    /// a request is delivered once. Without this, buttons whose command only *asks* for a dialog did nothing.
+    pub fn take_ui_requests(&self) -> Vec<String> {
+        let mut g = self.lock();
+        std::mem::take(&mut g.session.ui_requests).iter().map(|v| v.to_string()).collect()
+    }
+
     /// Plain text of the engine clipboard: after `edit.copy` / `edit.cut`, hand this to Android's
     /// `ClipboardManager`.
     pub fn clipboard_text(&self) -> String {
