@@ -1,416 +1,434 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.willkez.wordcraft.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.willkez.wordcraft.editor.EditorUiState
-import com.willkez.wordcraft.editor.EditorViewModel
 import org.json.JSONObject
-
-/*
- * Sheets for the commands whose engine side only *asks* the front-end for a dialog (Go To, Page Setup,
- * Paragraph, Insert Chart, Icons, Options…). The engine reports those requests (see EditorViewModel's
- * request handling); each one opens the matching sheet here, which then runs the command with real values.
- */
-
-@Composable
-private fun NumField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, decimal: Boolean = true, placeholder: String? = null) {
-    OutlinedTextField(
-        value, { raw -> onChange(raw.filter { it.isDigit() || (decimal && (it == '.' || it == '-')) }.take(8)) },
-        modifier, singleLine = true, label = { Text(label) }, placeholder = placeholder?.let { { Text(it) } },
-        keyboardOptions = KeyboardOptions(keyboardType = if (decimal) KeyboardType.Decimal else KeyboardType.Number),
-    )
-}
-
-private fun inchesToPt(s: String): Double? = s.toDoubleOrNull()?.let { it * 72.0 }
+import com.willkez.wordcraft.editor.EditorUiState
+import kotlin.math.abs
+import kotlin.math.hypot
 
 // ---------------------------------------------------------------------------------------------
-// Go To
+// Drawing: one line in any of Word's border styles, used by the live previews
 // ---------------------------------------------------------------------------------------------
 
-@Composable
-fun GoToSheet(ui: EditorUiState, d: Dispatcher, onDismiss: () -> Unit) {
-    var page by remember { mutableStateOf("") }
-    var para by remember { mutableStateOf("") }
-    var bookmark by remember { mutableStateOf("") }
-    val pages = ui.state?.pageCount?.toInt() ?: 1
-    AppSheet(onDismiss) {
-        SheetTitle("Go to", "Home › Editing")
-        SheetScroll {
-            SectionLabel("Page (1–$pages)")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                NumField("Page number", page, { page = it }, Modifier.weight(1f), decimal = false)
-                Button(
-                    { page.toIntOrNull()?.let { d.id("edit.goto", mapOf("page" to it.coerceIn(1, pages))); onDismiss() } },
-                    enabled = page.toIntOrNull() != null, colors = ButtonDefaults.buttonColors(containerColor = WordBlue),
-                ) { Text("Go") }
-            }
-            PillRow {
-                Pill("Previous page", false) { d.id("edit.goto", mapOf("pageBy" to -1)); onDismiss() }
-                Pill("Next page", false) { d.id("edit.goto", mapOf("pageBy" to 1)); onDismiss() }
-            }
-            SectionLabel("Paragraph")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                NumField("Paragraph number", para, { para = it }, Modifier.weight(1f), decimal = false)
-                Button(
-                    { para.toIntOrNull()?.let { d.id("edit.goto", mapOf("paragraph" to it)); onDismiss() } },
-                    enabled = para.toIntOrNull() != null, colors = ButtonDefaults.buttonColors(containerColor = WordBlue),
-                ) { Text("Go") }
-            }
-            SectionLabel("Bookmark")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(bookmark, { bookmark = it }, Modifier.weight(1f), singleLine = true, label = { Text("Bookmark name") })
-                Button(
-                    { d.id("edit.goto", mapOf("bookmark" to bookmark.trim())); onDismiss() },
-                    enabled = bookmark.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = WordBlue),
-                ) { Text("Go") }
-            }
+/** A line from `a` to `b` in a Word border style; `widthPt` scales the stroke. */
+internal fun DrawScope.borderLine(a: Offset, b: Offset, style: String, widthPt: Double, color: Color) {
+    val stroke = (widthPt.toFloat() * 1.7f).coerceAtLeast(1.2f)
+    val horizontal = abs(b.x - a.x) >= abs(b.y - a.y)
+    fun off(d: Float) = if (horizontal) Offset(0f, d) else Offset(d, 0f)
+    when (style) {
+        "double" -> {
+            val g = stroke * 1.1f
+            drawLine(color, a + off(-g), b + off(-g), stroke * 0.7f)
+            drawLine(color, a + off(g), b + off(g), stroke * 0.7f)
         }
-        DoneButton("Close", onDismiss)
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Page Setup
-// ---------------------------------------------------------------------------------------------
-
-@Composable
-fun PageSetupSheet(d: Dispatcher, onDismiss: () -> Unit) {
-    var size by remember { mutableStateOf<String?>(null) }
-    var orient by remember { mutableStateOf<String?>(null) }
-    var preset by remember { mutableStateOf<String?>(null) }
-    var top by remember { mutableStateOf("") }
-    var bottom by remember { mutableStateOf("") }
-    var left by remember { mutableStateOf("") }
-    var right by remember { mutableStateOf("") }
-    var cols by remember { mutableStateOf<Int?>(null) }
-    AppSheet(onDismiss) {
-        SheetTitle("Page setup", "Layout › Page Setup")
-        SheetScroll {
-            SectionLabel("Paper size")
-            PillRow { listOf("Letter", "Legal", "A4", "A3", "A5", "Executive").forEach { n -> Pill(n, size == n) { size = if (size == n) null else n } } }
-            SectionLabel("Orientation")
-            PillRow {
-                Pill("Portrait", orient == "portrait") { orient = if (orient == "portrait") null else "portrait" }
-                Pill("Landscape", orient == "landscape") { orient = if (orient == "landscape") null else "landscape" }
-            }
-            SectionLabel("Margins")
-            PillRow {
-                listOf("Normal" to "normal", "Narrow" to "narrow", "Moderate" to "moderate", "Wide" to "wide", "Mirrored" to "mirrored").forEach { (n, k) ->
-                    Pill(n, preset == k) { preset = if (preset == k) null else k }
+        "triple" -> {
+            val g = stroke * 1.5f
+            for (k in -1..1) drawLine(color, a + off(k * g), b + off(k * g), stroke * 0.5f)
+        }
+        "wave" -> {
+            val len = hypot(b.x - a.x, b.y - a.y)
+            val n = (len / 7f).toInt().coerceAtLeast(2)
+            val path = Path().apply {
+                moveTo(a.x, a.y)
+                for (i in 1..n) {
+                    val t = i / n.toFloat()
+                    val amp = if (i % 2 == 0) -stroke * 1.2f else stroke * 1.2f
+                    val p = Offset(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t) + off(amp)
+                    lineTo(p.x, p.y)
                 }
             }
-            Text("Or set your own, in inches (leave blank to keep):", fontSize = 12.sp, color = SheetMuted, modifier = Modifier.padding(top = 8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                NumField("Top", top, { top = it }, Modifier.weight(1f))
-                NumField("Bottom", bottom, { bottom = it }, Modifier.weight(1f))
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                NumField("Left", left, { left = it }, Modifier.weight(1f))
-                NumField("Right", right, { right = it }, Modifier.weight(1f))
-            }
-            SectionLabel("Columns")
-            PillRow { (1..4).forEach { n -> Pill("$n", cols == n) { cols = if (cols == n) null else n } } }
+            drawPath(path, color, style = Stroke(width = stroke * 0.7f))
         }
-        PrimaryButton("Apply") {
-            size?.let { d.id("layout.size", mapOf("name" to it)) }
-            orient?.let { d.id("layout.orientation", mapOf("value" to it)) }
-            val custom = buildMap<String, Any?> {
-                inchesToPt(top)?.let { put("top", it) }; inchesToPt(bottom)?.let { put("bottom", it) }
-                inchesToPt(left)?.let { put("left", it) }; inchesToPt(right)?.let { put("right", it) }
+        else -> {
+            val w = if (style == "thick") stroke * 2f else stroke
+            val dash = when (style) {
+                "dashed" -> PathEffect.dashPathEffect(floatArrayOf(w * 4f, w * 2.5f))
+                "dotted" -> PathEffect.dashPathEffect(floatArrayOf(w, w * 1.8f))
+                "dotDash" -> PathEffect.dashPathEffect(floatArrayOf(w * 4f, w * 1.5f, w, w * 1.5f))
+                else -> null
             }
-            if (custom.isNotEmpty()) d.id("layout.margins", custom) else preset?.let { d.id("layout.margins", mapOf("preset" to it)) }
-            cols?.let { d.id("layout.columns", mapOf("count" to it)) }
-            onDismiss()
+            drawLine(color, a, b, w, pathEffect = dash)
         }
     }
 }
 
+private val PreviewFrame = RoundedCornerShape(10.dp)
+
+/** A paragraph with the chosen border drawn round it (`kind` as the engine names it). */
+@Composable
+internal fun ParaBorderPreview(kind: String, style: String, width: Double, color: Color, shade: Color? = null) {
+    Canvas(Modifier.fillMaxWidth().height(88.dp).clip(PreviewFrame).background(Color(0xFFFAFAFA)).border(1.dp, SheetLine, PreviewFrame)) {
+        val l = 26.dp.toPx(); val r = size.width - l; val t = 18.dp.toPx(); val b = size.height - t
+        if (shade != null) drawRect(shade, Offset(l, t), Size(r - l, b - t))
+        for (i in 0..2) {
+            val w = (r - l - 24.dp.toPx()) * if (i == 2) 0.55f else 1f
+            drawRoundRect(Color(0xFFD0D5DD), Offset(l + 12.dp.toPx(), t + 10.dp.toPx() + i * 11.dp.toPx()), Size(w, 4.dp.toPx()), CornerRadius(2.dp.toPx()))
+        }
+        val top = Offset(l, t) to Offset(r, t); val bottom = Offset(l, b) to Offset(r, b)
+        val left = Offset(l, t) to Offset(l, b); val right = Offset(r, t) to Offset(r, b)
+        val lines = when (kind) {
+            "top" -> listOf(top); "bottom", "horizontalLine" -> listOf(bottom)
+            "left" -> listOf(left); "right" -> listOf(right)
+            "all", "outside" -> listOf(top, bottom, left, right)
+            else -> emptyList()
+        }
+        lines.forEach { (p, q) -> borderLine(p, q, style, width, color) }
+    }
+}
+
+/** A small table with the chosen borders (`kind` as the engine names it). */
+@Composable
+internal fun TableBorderPreview(kind: String, width: Double, color: Color) {
+    Canvas(Modifier.fillMaxWidth().height(96.dp).clip(PreviewFrame).background(Color(0xFFFAFAFA)).border(1.dp, SheetLine, PreviewFrame)) {
+        val l = 34.dp.toPx(); val r = size.width - l; val t = 14.dp.toPx(); val b = size.height - t
+        val cols = 3; val rows = 3
+        val faint = Color(0xFFE4E7EC)
+        // The grid as it would be without borders, so the chosen lines stand out.
+        for (i in 0..cols) { val x = l + (r - l) * i / cols; drawLine(faint, Offset(x, t), Offset(x, b), 1f) }
+        for (j in 0..rows) { val y = t + (b - t) * j / rows; drawLine(faint, Offset(l, y), Offset(r, y), 1f) }
+        val outerTop = kind in setOf("all", "outside", "top"); val outerBottom = kind in setOf("all", "outside", "bottom")
+        val outerLeft = kind in setOf("all", "outside", "left"); val outerRight = kind in setOf("all", "outside", "right")
+        val inside = kind == "all" || kind == "inside"
+        if (outerTop) borderLine(Offset(l, t), Offset(r, t), "single", width, color)
+        if (outerBottom) borderLine(Offset(l, b), Offset(r, b), "single", width, color)
+        if (outerLeft) borderLine(Offset(l, t), Offset(l, b), "single", width, color)
+        if (outerRight) borderLine(Offset(r, t), Offset(r, b), "single", width, color)
+        if (inside) {
+            for (i in 1 until cols) { val x = l + (r - l) * i / cols; borderLine(Offset(x, t), Offset(x, b), "single", width, color) }
+            for (j in 1 until rows) { val y = t + (b - t) * j / rows; borderLine(Offset(l, y), Offset(r, y), "single", width, color) }
+        }
+    }
+}
+
+/** The page with its border drawn on, so a choice of sides, style and colour is visible before it is applied. */
+@Composable
+private fun PageBorderPreview(sides: Set<String>, style: String, width: Double, color: Color, display: String = "all") {
+    Row(Modifier.fillMaxWidth().height(150.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+        // Two pages side by side: the border shows on each page `display` allows.
+        listOf(true, false).forEach { firstPage ->
+            val shown = when (display) { "first" -> firstPage; "notFirst" -> !firstPage; else -> true }
+            Canvas(Modifier.width(108.dp).height(144.dp).clip(RoundedCornerShape(4.dp)).background(Color.White).border(1.dp, Color(0xFFCBD0D8), RoundedCornerShape(4.dp))) {
+                val m = 12.dp.toPx(); val l = m; val r = size.width - m; val t = m; val b = size.height - m
+                for (i in 0..7) {
+                    val w = (r - l - 20.dp.toPx()) * if (i % 4 == 3) 0.5f else 1f
+                    drawRoundRect(Color(0xFFE4E7EC), Offset(l + 10.dp.toPx(), t + 14.dp.toPx() + i * 12.dp.toPx()), Size(w, 4.dp.toPx()), CornerRadius(2.dp.toPx()))
+                }
+                if (shown) {
+                    if ("top" in sides) borderLine(Offset(l, t), Offset(r, t), style, width, color)
+                    if ("bottom" in sides) borderLine(Offset(l, b), Offset(r, b), style, width, color)
+                    if ("left" in sides) borderLine(Offset(l, t), Offset(l, b), style, width, color)
+                    if ("right" in sides) borderLine(Offset(r, t), Offset(r, b), style, width, color)
+                }
+            }
+        }
+    }
+}
+
+private fun widthText(w: Double) = "$w pt"
+
 // ---------------------------------------------------------------------------------------------
-// Paragraph
+// Borders and shading (paragraphs)
 // ---------------------------------------------------------------------------------------------
 
+private val PARA_WHERE = listOf("bottom" to "Bottom", "top" to "Top", "left" to "Left", "right" to "Right", "all" to "All sides", "outside" to "Outside", "horizontalLine" to "Line", "none" to "None")
+internal val LINE_STYLES = listOf("single" to "Solid", "double" to "Double", "dotted" to "Dotted", "dashed" to "Dashed", "thick" to "Thick", "triple" to "Triple", "dotDash" to "Dot-dash", "wave" to "Wave")
+
+/** Paragraph borders in every line style Word has, with paragraph shading. */
 @Composable
-fun ParagraphSheet(ui: EditorUiState, d: Dispatcher, onDismiss: () -> Unit) {
-    var align by remember { mutableStateOf<String?>(null) }
-    var left by remember { mutableStateOf("") }
-    var right by remember { mutableStateOf("") }
-    var first by remember { mutableStateOf("") }
-    var before by remember { mutableStateOf("") }
-    var after by remember { mutableStateOf("") }
-    var line by remember { mutableStateOf<String?>(null) }
-    var lineValue by remember { mutableStateOf("") }
-    val current = ui.state?.alignment
+fun ParaBorderSheet(d: Dispatcher, onDismiss: () -> Unit) {
+    var kind by remember { mutableStateOf("bottom") }
+    var style by remember { mutableStateOf("single") }
+    var width by remember { mutableStateOf(1.0) }
+    var color by remember { mutableStateOf("000000") }
+    var shade by remember { mutableStateOf<String?>(null) }
     AppSheet(onDismiss) {
-        SheetTitle("Paragraph", "Home › Paragraph")
+        SheetTitle("Borders and shading", "For the selected paragraphs")
         SheetScroll {
-            SectionLabel("Alignment")
-            PillRow {
-                listOf("Left" to "para.alignLeft", "Centre" to "para.alignCenter", "Right" to "para.alignRight", "Justify" to "para.justify").forEach { (n, id) ->
-                    val on = align == id || (align == null && current == when (id) { "para.alignLeft" -> "left"; "para.alignCenter" -> "center"; "para.alignRight" -> "right"; else -> "justify" })
-                    Pill(n, on) { align = id }
-                }
+            ParaBorderPreview(kind, style, width, parseHex(color) ?: Color.Black, parseHex(shade))
+            SectionLabel("Where")
+            PillRow { PARA_WHERE.forEach { (k, n) -> Pill(n, kind == k) { kind = k } } }
+            SectionLabel("Line style")
+            PillRow { LINE_STYLES.forEach { (k, n) -> Pill(n, style == k) { style = k } } }
+            SectionLabel("Thickness")
+            PillRow { LINE_WIDTHS.forEach { w -> Pill(widthText(w), width == w) { width = w } } }
+            SectionLabel("Colour")
+            SwatchRow(color, LINE_COLORS) { color = it }
+            PrimaryButton("Apply border") {
+                d.id("para.borders", if (kind == "none") mapOf("kind" to "none") else mapOf("kind" to kind, "style" to style, "width" to width, "color" to color))
             }
-            SectionLabel("Indentation, in inches")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumField("Left", left, { left = it }, Modifier.weight(1f))
-                NumField("Right", right, { right = it }, Modifier.weight(1f))
-            }
-            NumField("First line (negative = hanging)", first, { first = it }, Modifier.fillMaxWidth().padding(top = 6.dp))
-            SectionLabel("Spacing, in points")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumField("Before", before, { before = it }, Modifier.weight(1f))
-                NumField("After", after, { after = it }, Modifier.weight(1f))
-            }
-            SectionLabel("Line spacing")
-            PillRow {
-                listOf("Single" to "1.0", "1.15" to "1.15", "1.5" to "1.5", "Double" to "2.0", "At least" to "atLeast", "Exactly" to "exactly").forEach { (n, k) ->
-                    Pill(n, line == k) { line = if (line == k) null else k }
-                }
-            }
-            if (line == "atLeast" || line == "exactly") NumField("Points", lineValue, { lineValue = it }, Modifier.fillMaxWidth().padding(top = 6.dp))
+            SectionLabel("Shading")
+            SwatchRow(shade, SHADE_COLORS) { shade = it; d.id("para.shading", mapOf("color" to it)) }
+            QuietButton("No shading") { shade = null; d.id("para.shading", mapOf("color" to JSONObject.NULL)) }
         }
-        PrimaryButton("Apply") {
-            align?.let { d.id(it) }
-            val indents = buildMap<String, Any?> {
-                inchesToPt(left)?.let { put("left", it) }; inchesToPt(right)?.let { put("right", it) }; inchesToPt(first)?.let { put("firstLine", it) }
-            }
-            if (indents.isNotEmpty()) d.id("para.indents", indents)
-            val spacing = buildMap<String, Any?> { before.toDoubleOrNull()?.let { put("before", it) }; after.toDoubleOrNull()?.let { put("after", it) } }
-            if (spacing.isNotEmpty()) d.id("para.spacing", spacing)
-            when (line) {
-                null -> {}
-                "atLeast", "exactly" -> lineValue.toDoubleOrNull()?.let { d.id("para.lineSpacing", mapOf(line!! to it)) }
-                else -> d.id("para.lineSpacing", mapOf("value" to line!!.toDouble()))
-            }
-            onDismiss()
-        }
+        DoneButton(onClick = onDismiss)
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// Insert table
+// Format table
 // ---------------------------------------------------------------------------------------------
 
-@Composable
-fun InsertTableSheet(d: Dispatcher, onDismiss: () -> Unit) {
-    var rows by remember { mutableIntStateOf(3) }
-    var cols by remember { mutableIntStateOf(3) }
-    AppSheet(onDismiss) {
-        SheetTitle("Insert table", "Insert › Tables")
-        Stepper(rows, 1..50, "Rows") { rows = it }
-        Stepper(cols, 1..20, "Columns") { cols = it }
-        // A little preview so the size is obvious before inserting.
-        Column(Modifier.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            for (r in 1..minOf(rows, 6)) Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                for (c in 1..minOf(cols, 10)) Box(Modifier.size(22.dp, 14.dp).background(Color.White).border(1.dp, WordBlue))
-            }
-        }
-        PrimaryButton("Insert $cols × $rows table") { d.id("insert.table", mapOf("rows" to rows, "cols" to cols)); onDismiss() }
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Chart
-// ---------------------------------------------------------------------------------------------
-
-private val CHART_TYPES = listOf(
-    "Column" to "column", "Stacked column" to "columnStacked", "Bar" to "bar", "Stacked bar" to "barStacked", "Line" to "line",
-    "Area" to "area", "Pie" to "pie", "Doughnut" to "doughnut", "Scatter" to "scatter",
+private val TABLE_WHERE = listOf("all" to "All", "outside" to "Outside", "inside" to "Inside", "top" to "Top", "bottom" to "Bottom", "left" to "Left", "right" to "Right", "none" to "None")
+private val ALIGN_GRID = listOf(
+    listOf("topLeft", "topCenter", "topRight"),
+    listOf("centerLeft", "center", "centerRight"),
+    listOf("bottomLeft", "bottomCenter", "bottomRight"),
 )
+private val FALLBACK_STYLES = listOf("Table Grid", "Plain Table 1", "Grid Table 1 Light", "Grid Table 4 – Blue", "Grid Table 4 – Orange", "Grid Table 4 – Green", "Grid Table 4 – Purple", "List Table 3 – Blue")
 
-/** First row: series names after a blank first cell; then a category and one number per series. */
-private fun parseChartData(text: String): Map<String, Any?>? {
-    val rows = text.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { l -> l.split(',', '\t', ';').map { it.trim() } }
-    if (rows.size < 2 || rows[0].size < 2) return null
-    val body = rows.drop(1)
-    val series = rows[0].drop(1).mapIndexed { i, n -> mapOf("name" to n.ifBlank { "Series ${i + 1}" }, "values" to body.map { r -> r.getOrNull(i + 1)?.toDoubleOrNull() }) }
-    return mapOf("categories" to body.map { it.firstOrNull().orEmpty() }, "series" to series)
+/** What colour a table style's header row has, from its name (Office's accent colours too). */
+private fun tableStyleAccent(name: String): Color? {
+    val n = name.lowercase()
+    return when {
+        "blue" in n || "accent 1" in n || "accent 5" in n -> Color(0xFF4472C4)
+        "orange" in n || "accent 2" in n -> Color(0xFFED7D31)
+        "green" in n || "accent 6" in n -> Color(0xFF70AD47)
+        "purple" in n -> Color(0xFF7030A0)
+        "gold" in n || "yellow" in n || "accent 4" in n -> Color(0xFFFFC000)
+        "red" in n -> Color(0xFFC00000)
+        "gray" in n || "grey" in n || "accent 3" in n -> Color(0xFFA5A5A5)
+        else -> null
+    }
 }
 
+/** Everything about how a table looks: borders, shading, cell alignment, size and fit, styles. */
 @Composable
-fun ChartSheet(d: Dispatcher, onDismiss: () -> Unit) {
-    var type by remember { mutableStateOf("column") }
-    var title by remember { mutableStateOf("") }
-    var legend by remember { mutableStateOf("right") }
-    var labels by remember { mutableStateOf(false) }
-    var data by remember { mutableStateOf("Category,Series 1,Series 2\nQ1,4,2\nQ2,5,3\nQ3,3,4\nQ4,6,5") }
-    val parsed = parseChartData(data)
+fun TableFormatSheet(ui: EditorUiState, d: Dispatcher, onDismiss: () -> Unit) {
+    var kind by remember { mutableStateOf("all") }
+    var width by remember { mutableStateOf(1.0) }
+    var color by remember { mutableStateOf("000000") }
+    var shade by remember { mutableStateOf<String?>(null) }
+    var header by remember { mutableStateOf(true) }
+    var banded by remember { mutableStateOf(true) }
+    var firstCol by remember { mutableStateOf(false) }
+    var lastCol by remember { mutableStateOf(false) }
+    var total by remember { mutableStateOf(false) }
+    var bandedCols by remember { mutableStateOf(false) }
+    var colWidth by remember { mutableStateOf("") }
+    var rowHeight by remember { mutableStateOf("") }
+    val styles = remember(ui.tableStyles) { ui.tableStyles.ifEmpty { FALLBACK_STYLES }.take(48) }
+    var styleChosen by remember { mutableStateOf<String?>(null) }
+
     AppSheet(onDismiss) {
-        SheetTitle("Insert chart", "Insert › Illustrations")
+        SheetTitle("Format table", "Changes apply to the selected cells, or the whole table")
         SheetScroll {
-            SectionLabel("Type")
-            PillRow { CHART_TYPES.forEach { (n, k) -> Pill(n, type == k) { type = k } } }
-            OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth().padding(top = 10.dp), singleLine = true, label = { Text("Chart title (optional)") })
-            SectionLabel("Legend")
-            PillRow { listOf("Right" to "right", "Bottom" to "bottom", "Top" to "top", "Left" to "left", "None" to "none").forEach { (n, k) -> Pill(n, legend == k) { legend = k } } }
-            SwitchRow("Data labels", labels) { labels = it }
-            SectionLabel("Data")
-            OutlinedTextField(
-                data, { data = it }, Modifier.fillMaxWidth(), minLines = 5, maxLines = 10,
-                label = { Text("One row per line: category, then a number per series") },
-                supportingText = { if (parsed == null) Text("Needs a header row and at least one data row", color = MaterialTheme.colorScheme.error) },
-            )
+            TableBorderPreview(if (kind == "none") "none" else kind, width, parseHex(color) ?: Color.Black)
+            SectionLabel("Borders")
+            PillRow { TABLE_WHERE.forEach { (k, n) -> Pill(n, kind == k) { kind = k } } }
+            SectionLabel("Thickness")
+            PillRow { LINE_WIDTHS.forEach { w -> Pill(widthText(w), width == w) { width = w } } }
+            SectionLabel("Colour")
+            SwatchRow(color, LINE_COLORS) { color = it }
+            PrimaryButton("Apply borders") {
+                d.id("table.borders", if (kind == "none") mapOf("kind" to "none") else mapOf("kind" to kind, "width" to width, "color" to color))
+            }
+
+            SectionLabel("Shading")
+            SwatchRow(shade, SHADE_COLORS) { shade = it; d.id("table.shading", mapOf("color" to it)) }
+            QuietButton("No shading") { shade = null; d.id("table.shading", mapOf("color" to JSONObject.NULL)) }
+
+            SectionLabel("Cell alignment")
+            ALIGN_GRID.forEach { row ->
+                Row { row.forEach { a -> AlignTile(a) { d.id("table.cellAlign", mapOf("value" to a)) } } }
+            }
+
+            SectionLabel("Size and fit")
+            PillRow {
+                Pill("AutoFit contents", false) { d.id("table.autofit", mapOf("mode" to "contents")) }
+                Pill("Fit window", false) { d.id("table.autofit", mapOf("mode" to "window")) }
+                Pill("Fixed width", false) { d.id("table.autofit", mapOf("mode" to "fixed")) }
+            }
+            PillRow {
+                Pill("Equal columns", false) { d.id("table.distributeColumns") }
+                Pill("Equal rows", false) { d.id("table.distributeRows") }
+            }
+            NumberRow("Column width (pt)", colWidth, { colWidth = it }) { v -> d.id("table.columnWidth", mapOf("width" to v)) }
+            NumberRow("Row height (pt)", rowHeight, { rowHeight = it }) { v -> d.id("table.rowHeight", mapOf("height" to v)) }
+
+            SectionLabel("Table style")
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                items(styles) { name ->
+                    StyleSwatch(name, styleChosen == name) { styleChosen = name; d.id("table.style", mapOf("style" to name)) }
+                }
+            }
+            SectionLabel("Style options")
+            PillRow {
+                Pill("Header row", header) { header = !header; d.id("table.look", mapOf("headerRow" to header)) }
+                Pill("Banded rows", banded) { banded = !banded; d.id("table.look", mapOf("bandedRows" to banded)) }
+                Pill("First column", firstCol) { firstCol = !firstCol; d.id("table.look", mapOf("firstColumn" to firstCol)) }
+            }
+            PillRow {
+                Pill("Last column", lastCol) { lastCol = !lastCol; d.id("table.look", mapOf("lastColumn" to lastCol)) }
+                Pill("Total row", total) { total = !total; d.id("table.look", mapOf("totalRow" to total)) }
+                Pill("Banded columns", bandedCols) { bandedCols = !bandedCols; d.id("table.look", mapOf("bandedColumns" to bandedCols)) }
+            }
         }
-        PrimaryButton("Insert chart", enabled = parsed != null) {
+        DoneButton(onClick = onDismiss)
+    }
+}
+
+/** A labelled number box with its own Set button, for exact column widths and row heights. */
+@Composable
+private fun NumberRow(label: String, value: String, onChange: (String) -> Unit, onSet: (Double) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = value, onValueChange = { onChange(it.filter { c -> c.isDigit() || c == '.' }) }, singleLine = true,
+            label = { Text(label) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.weight(1f),
+        )
+        QuietButton("Set", value.toDoubleOrNull() != null) { value.toDoubleOrNull()?.let(onSet) }
+    }
+}
+
+/** A 3×3 grid cell showing where the text will sit. */
+@Composable
+private fun AlignTile(a: String, onClick: () -> Unit) {
+    val h = when { a.endsWith("Left") -> 0; a.endsWith("Right") -> 2; else -> 1 }
+    val v = when { a.startsWith("top") -> 0; a.startsWith("bottom") -> 2; else -> 1 }
+    Box(
+        Modifier.padding(end = 8.dp, bottom = 8.dp).size(width = 76.dp, height = 52.dp)
+            .clip(RoundedCornerShape(10.dp)).background(PillIdle).clickable(onClick = onClick),
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val pad = 10.dp.toPx(); val barH = 3.dp.toPx(); val gap = 4.dp.toPx()
+            val fractions = listOf(0.75f, 0.45f)
+            val inner = size.width - 2 * pad
+            val total = fractions.size * barH + (fractions.size - 1) * gap
+            val y0 = when (v) { 0 -> pad * 0.8f; 1 -> (size.height - total) / 2f; else -> size.height - pad * 0.8f - total }
+            fractions.forEachIndexed { i, f ->
+                val w = inner * f
+                val x = when (h) { 0 -> pad; 1 -> (size.width - w) / 2f; else -> size.width - pad - w }
+                drawRoundRect(SheetInk, Offset(x, y0 + i * (barH + gap)), Size(w, barH), CornerRadius(barH / 2f))
+            }
+        }
+    }
+}
+
+/** A table style as a tiny table, tinted like its header row. */
+@Composable
+private fun StyleSwatch(name: String, selected: Boolean, onClick: () -> Unit) {
+    val accent = tableStyleAccent(name)
+    val shape = RoundedCornerShape(8.dp)
+    Column(
+        Modifier.width(78.dp).clip(shape).background(PanelBg)
+            .border(if (selected) 2.dp else 1.dp, if (selected) WordBlue else SheetLine, shape)
+            .clickable(onClick = onClick).padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Canvas(Modifier.fillMaxWidth().height(40.dp)) {
+            val rows = 4; val cols = 3
+            val rh = size.height / rows; val cw = size.width / cols
+            val grid = Color(0xFFB8BEC8)
+            for (r in 0 until rows) {
+                if (r == 0 && accent != null) drawRect(accent, Offset(0f, 0f), Size(size.width, rh))
+                else if (r % 2 == 0 && accent != null) drawRect(accent.copy(alpha = 0.16f), Offset(0f, r * rh), Size(size.width, rh))
+            }
+            if (!name.contains("plain", ignoreCase = true)) {
+                for (r in 0..rows) drawLine(grid, Offset(0f, r * rh), Offset(size.width, r * rh), 1f)
+                for (c in 0..cols) drawLine(grid, Offset(c * cw, 0f), Offset(c * cw, size.height), 1f)
+            }
+        }
+        Text(name.replace("Table", "").trim(), Modifier.padding(top = 4.dp), fontSize = 9.sp, maxLines = 2, color = SheetMuted)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Page borders
+// ---------------------------------------------------------------------------------------------
+
+private val PAGE_SIDES = listOf("top" to "Top", "bottom" to "Bottom", "left" to "Left", "right" to "Right")
+
+/** Page borders: a box or any sides, line style, width and colour, for this section or the whole document. */
+@Composable
+fun PageBordersSheet(d: Dispatcher, onDismiss: () -> Unit) {
+    var sides by remember { mutableStateOf(setOf("top", "bottom", "left", "right")) }
+    var style by remember { mutableStateOf("single") }
+    var width by remember { mutableStateOf(1.5) }
+    var color by remember { mutableStateOf("000000") }
+    var applyTo by remember { mutableStateOf("document") }
+    var display by remember { mutableStateOf("all") }
+    AppSheet(onDismiss) {
+        SheetTitle("Page borders", "Design")
+        SheetScroll {
+            PageBorderPreview(sides, style, width, parseHex(color) ?: Color.Black, display)
+            SectionLabel("Setting")
+            PillRow {
+                Pill("None", sides.isEmpty()) { sides = emptySet() }
+                Pill("Box", sides.size == 4) { sides = PAGE_SIDES.map { it.first }.toSet() }
+            }
+            PillRow {
+                PAGE_SIDES.forEach { (k, n) -> Pill(n, k in sides) { sides = if (k in sides) sides - k else sides + k } }
+            }
+            SectionLabel("Style")
+            PillRow { LINE_STYLES.forEach { (k, n) -> Pill(n, style == k) { style = k } } }
+            SectionLabel("Width")
+            PillRow { LINE_WIDTHS.forEach { w -> Pill(widthText(w), width == w) { width = w } } }
+            SectionLabel("Colour")
+            SwatchRow(color, PAGE_BORDER_COLORS) { color = it }
+            HexField(color) { color = it }
+            SectionLabel("Apply to")
+            PillRow {
+                Pill("Whole document", applyTo == "document") { applyTo = "document" }
+                Pill("This section", applyTo == "section") { applyTo = "section" }
+            }
+            SectionLabel("Show on")
+            PillRow {
+                Pill("All pages", display == "all") { display = "all" }
+                Pill("First page only", display == "first") { display = "first" }
+                Pill("All except first", display == "notFirst") { display = "notFirst" }
+            }
+        }
+        PrimaryButton("Apply") {
+            val c = if (color.length == 6) color else "000000"
+            val line = mapOf("style" to style, "width" to width, "color" to c)
             d.id(
-                "insert.chart",
-                buildMap<String, Any?> {
-                    put("type", type); put("data", parsed); put("legend", legend); put("dataLabels", labels)
-                    if (title.isNotBlank()) put("title", title.trim())
+                "design.pageBorders",
+                when {
+                    sides.isEmpty() -> mapOf("kind" to "none", "applyTo" to applyTo)
+                    sides.size == 4 -> mapOf("kind" to "box", "style" to style, "width" to width, "color" to c, "applyTo" to applyTo, "display" to display)
+                    else -> mapOf("sides" to sides.associateWith { line }, "applyTo" to applyTo, "display" to display)
                 },
             )
-            onDismiss()
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// SmartArt
-// ---------------------------------------------------------------------------------------------
-
-private val SMART_LAYOUTS = listOf(
-    "List" to "basicList", "Process" to "process", "Cycle" to "cycle", "Hierarchy" to "hierarchy",
-    "Pyramid" to "pyramid", "Radial" to "radial", "Matrix" to "matrix", "Venn" to "venn",
-)
-
-@Composable
-fun SmartArtSheet(d: Dispatcher, onDismiss: () -> Unit) {
-    var layout by remember { mutableStateOf("process") }
-    var items by remember { mutableStateOf("") }
-    AppSheet(onDismiss) {
-        SheetTitle("Insert SmartArt", "Insert › Illustrations")
-        SheetScroll {
-            SectionLabel("Layout")
-            PillRow { SMART_LAYOUTS.forEach { (n, k) -> Pill(n, layout == k) { layout = k } } }
-            OutlinedTextField(
-                items, { items = it }, Modifier.fillMaxWidth().padding(top = 12.dp), minLines = 4, maxLines = 8,
-                label = { Text("Items, one per line (leave empty for sample items)") },
-            )
-        }
-        PrimaryButton("Insert SmartArt") {
-            val lines = items.lines().map { it.trim() }.filter { it.isNotEmpty() }
-            d.id("insert.smartArt", buildMap<String, Any?> { put("layout", layout); if (lines.isNotEmpty()) put("items", lines) })
-            onDismiss()
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Icons
-// ---------------------------------------------------------------------------------------------
-
-private class IconHit(val id: String, val name: String, val category: String)
-
-@Composable
-fun IconsSheet(vm: EditorViewModel, d: Dispatcher, onDismiss: () -> Unit) {
-    var query by remember { mutableStateOf("") }
-    var hits by remember { mutableStateOf<List<IconHit>>(emptyList()) }
-    var picked by remember { mutableStateOf<IconHit?>(null) }
-    var color by remember { mutableStateOf("000000") }
-    var size by remember { mutableIntStateOf(72) }
-    LaunchedEffect(query) {
-        vm.query("insert.icon", JSONObject().put("query", query.trim()).toString()) { out ->
-            hits = runCatching {
-                val a = JSONObject(out).getJSONArray("icons")
-                (0 until a.length()).map { i -> a.getJSONObject(i).let { IconHit(it.getString("id"), it.optString("name", it.getString("id")), it.optString("category")) } }
-            }.getOrDefault(emptyList())
-        }
-    }
-    AppSheet(onDismiss) {
-        SheetTitle("Insert icon", "Insert › Illustrations")
-        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Search icons") })
-        Text("${hits.size} icons", fontSize = 11.sp, color = SheetMuted, modifier = Modifier.padding(top = 4.dp))
-        SheetScroll(heightFraction = 0.55f) {
-            hits.take(120).forEach { h ->
-                val on = picked?.id == h.id
-                Row(
-                    Modifier.fillMaxWidth().clickable { picked = h }.background(if (on) Color(0xFFE3ECFA) else Color.Transparent).padding(horizontal = 8.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(h.name, Modifier.weight(1f), fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = SheetInk)
-                    Text(h.category, fontSize = 11.sp, color = SheetMuted)
-                }
-            }
-            if (hits.isEmpty()) Text("No icons match", Modifier.padding(12.dp), color = SheetMuted)
-        }
-        SectionLabel("Colour")
-        SwatchRow(color, listOf("000000", "595959", "C00000", "ED7D31", "FFC000", "548235", "00B0F0", "185ABD", "7030A0", "FF00FF"), { color = it })
-        SectionLabel("Size")
-        PillRow { listOf(36, 72, 108, 144).forEach { s -> Pill("$s pt", size == s) { size = s } } }
-        PrimaryButton(if (picked != null) "Insert “${picked!!.name}”" else "Choose an icon", enabled = picked != null) {
-            picked?.let { d.id("insert.icon", mapOf("id" to it.id, "color" to color, "size" to size)) }
-            onDismiss()
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Options
-// ---------------------------------------------------------------------------------------------
-
-@Composable
-fun OptionsSheet(d: Dispatcher, onDismiss: () -> Unit) {
-    var author by remember { mutableStateOf("") }
-    var initials by remember { mutableStateOf("") }
-    var units by remember { mutableStateOf<String?>(null) }
-    AppSheet(onDismiss) {
-        SheetTitle("Options", "File › Options")
-        SheetScroll {
-            SectionLabel("Author")
-            OutlinedTextField(author, { author = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Name on comments and tracked changes") })
-            OutlinedTextField(initials, { initials = it.take(6) }, Modifier.fillMaxWidth().padding(top = 6.dp), singleLine = true, label = { Text("Initials") })
-            SectionLabel("Measurement units")
-            PillRow {
-                listOf("Inches" to "inches", "Centimetres" to "centimeters", "Millimetres" to "millimeters", "Points" to "points", "Picas" to "picas", "Automatic" to "auto").forEach { (n, k) ->
-                    Pill(n, units == k) { units = if (units == k) null else k }
-                }
-            }
-        }
-        PrimaryButton("Save", enabled = author.isNotBlank() || initials.isNotBlank() || units != null) {
-            d.id("file.options", buildMap<String, Any?> {
-                if (author.isNotBlank()) put("author", author.trim())
-                if (initials.isNotBlank()) put("initials", initials.trim())
-                units?.let { put("units", it) }
-            })
-            onDismiss()
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Caption
-// ---------------------------------------------------------------------------------------------
-
-@Composable
-fun CaptionSheet(d: Dispatcher, onDismiss: () -> Unit) {
-    var label by remember { mutableStateOf("Figure") }
-    var text by remember { mutableStateOf("") }
-    var below by remember { mutableStateOf(true) }
-    AppSheet(onDismiss) {
-        SheetTitle("Insert caption", "References › Captions")
-        SectionLabel("Label")
-        PillRow { listOf("Figure", "Table", "Equation").forEach { n -> Pill(n, label == n) { label = n } } }
-        OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth().padding(top = 10.dp), singleLine = true, label = { Text("Caption text (optional)") })
-        SectionLabel("Position")
-        PillRow {
-            Pill("Below", below) { below = true }
-            Pill("Above", !below) { below = false }
-        }
-        PrimaryButton("Insert caption") {
-            d.id("references.caption", buildMap<String, Any?> { put("label", label); put("position", if (below) "below" else "above"); if (text.isNotBlank()) put("text", text.trim()) })
             onDismiss()
         }
     }
