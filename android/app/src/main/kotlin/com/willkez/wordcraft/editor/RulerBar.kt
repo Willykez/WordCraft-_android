@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.willkez.wordcraft.ui.AppTheme
 import com.willkez.wordcraft.ui.WordBlue
 import com.willkez.wordcraft.bridge.RulerInfo
 import kotlin.math.abs
@@ -61,7 +62,7 @@ fun RulerBar(
     val firstAbs = leftAbs + r.firstLine
     val rightAbs = r.bodyX + r.bodyW - r.right
 
-    Box(modifier.fillMaxWidth().height(26.dp).background(Color(0xFFE9ECF1))) {
+    Box(modifier.fillMaxWidth().height(26.dp).background(if (AppTheme.dark) Color(0xFF2A2A2E) else Color(0xFFE9ECF1))) {
         Canvas(
             Modifier.fillMaxSize()
                 .pointerInput(r, pageLeftPx, pxPerPt) {
@@ -115,8 +116,8 @@ fun RulerBar(
             val h = size.height
             fun px(abs: Float) = pageLeftPx + abs * pxPerPt
             // Page and text column.
-            drawRect(Color(0xFFD5DAE2), Offset(px(0f), 4.dp.toPx()), androidx.compose.ui.geometry.Size(r.pageW * pxPerPt, h - 8.dp.toPx()))
-            drawRect(Color.White, Offset(px(r.bodyX), 4.dp.toPx()), androidx.compose.ui.geometry.Size(r.bodyW * pxPerPt, h - 8.dp.toPx()))
+            drawRect(if (AppTheme.dark) Color(0xFF3A3A40) else Color(0xFFD5DAE2), Offset(px(0f), 4.dp.toPx()), androidx.compose.ui.geometry.Size(r.pageW * pxPerPt, h - 8.dp.toPx()))
+            drawRect(if (AppTheme.dark) Color(0xFFE6E6EA) else Color.White, Offset(px(r.bodyX), 4.dp.toPx()), androidx.compose.ui.geometry.Size(r.bodyW * pxPerPt, h - 8.dp.toPx()))
             // Graduations from the left margin: every quarter inch, a number each inch.
             val paint = android.graphics.Paint().apply { color = 0xFF5F6672.toInt(); textSize = 9.sp.toPx(); isAntiAlias = true; textAlign = android.graphics.Paint.Align.CENTER }
             val kMin = floor(-r.bodyX / 18f).toInt(); val kMax = ceil((r.pageW - r.bodyX) / 18f).toInt()
@@ -124,21 +125,21 @@ fun RulerBar(
                 val x = px(r.bodyX + k * 18f)
                 when {
                     k % 4 == 0 -> if (k != 0) drawContext.canvas.nativeCanvas.drawText("${abs(k / 4)}", x, h / 2f + 3.dp.toPx(), paint)
-                    k % 2 == 0 -> drawLine(Color(0xFF8A919C), Offset(x, h / 2f - 3.dp.toPx()), Offset(x, h / 2f + 3.dp.toPx()), 1.2f)
-                    else -> drawLine(Color(0xFFB4BAC4), Offset(x, h / 2f - 1.5.dp.toPx()), Offset(x, h / 2f + 1.5.dp.toPx()), 1f)
+                    k % 2 == 0 -> drawLine(if (AppTheme.dark) Color(0xFFA2A8B3) else Color(0xFF8A919C), Offset(x, h / 2f - 3.dp.toPx()), Offset(x, h / 2f + 3.dp.toPx()), 1.2f)
+                    else -> drawLine(if (AppTheme.dark) Color(0xFF6F7580) else Color(0xFFB4BAC4), Offset(x, h / 2f - 1.5.dp.toPx()), Offset(x, h / 2f + 1.5.dp.toPx()), 1f)
                 }
             }
             // Tab stops.
             r.tabs.forEachIndexed { i, t ->
                 val ax = if (grab == Grab.TAB && i == tabIndex) live else r.bodyX + t.pos
-                tabMarker(px(ax), h, t.kind, if (grab == Grab.TAB && i == tabIndex) WordBlue else Color(0xFF444B57))
+                tabMarker(px(ax), h, t.kind, if (grab == Grab.TAB && i == tabIndex) WordBlue else (if (AppTheme.dark) Color(0xFFC9CED8) else Color(0xFF444B57)))
             }
             // Indent markers; the dragged one follows the finger.
             val fx = when (grab) { Grab.FIRST -> live; else -> firstAbs }
             val lx = when (grab) { Grab.HANGING, Grab.LEFT_BOTH -> live; else -> leftAbs }
             val fxx = if (grab == Grab.LEFT_BOTH) fx + (live - leftAbs) else fx
             val rx = if (grab == Grab.RIGHT) live else rightAbs
-            val ink = Color(0xFF3A404B)
+            val ink = if (AppTheme.dark) Color(0xFFD0D4DC) else Color(0xFF3A404B)
             tri(px(fxx), 3.dp.toPx(), down = true, color = if (grab == Grab.FIRST) WordBlue else ink)
             tri(px(lx), h - 8.dp.toPx(), down = false, color = if (grab == Grab.HANGING) WordBlue else ink)
             drawRect(if (grab == Grab.LEFT_BOTH) WordBlue else ink, Offset(px(lx) - 4.5.dp.toPx(), h - 7.dp.toPx()), androidx.compose.ui.geometry.Size(9.dp.toPx(), 4.dp.toPx()))
@@ -146,9 +147,9 @@ fun RulerBar(
         }
         // Corner box: the kind of tab stop a tap on the ruler adds.
         Box(
-            Modifier.align(Alignment.CenterStart).size(26.dp).background(Color(0xFFF7F8FA)).clickable { kind = KINDS[(KINDS.indexOf(kind) + 1) % KINDS.size] },
+            Modifier.align(Alignment.CenterStart).size(26.dp).background(if (AppTheme.dark) Color(0xFF34343A) else Color(0xFFF7F8FA)).clickable { kind = KINDS[(KINDS.indexOf(kind) + 1) % KINDS.size] },
             contentAlignment = Alignment.Center,
-        ) { Text(KIND_GLYPH[kind] ?: "L", fontSize = 13.sp, color = Color(0xFF3A404B)) }
+        ) { Text(KIND_GLYPH[kind] ?: "L", fontSize = 13.sp, color = if (AppTheme.dark) Color(0xFFD0D4DC) else Color(0xFF3A404B)) }
     }
 }
 

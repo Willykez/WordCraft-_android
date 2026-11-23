@@ -83,7 +83,7 @@ fun BordersDialog(forTable: Boolean, onDismiss: () -> Unit, onApply: (kind: Stri
                     BORDER_COLORS.forEach { c ->
                         Box(
                             Modifier.size(28.dp).background(hex(c), CircleShape)
-                                .border(if (color == c) 3.dp else 1.dp, if (color == c) WordBlue else Color.Gray, CircleShape)
+                                .border(if (color == c) 3.dp else 1.dp, if (color == c) WordBlue else RibbonLine, CircleShape)
                                 .clickable { color = c },
                         )
                     }
@@ -192,7 +192,7 @@ fun ObjectBar(ui: EditorUiState, d: Dispatcher, vm: EditorViewModel, modifier: M
     var borderW by remember { mutableIntStateOf(3) }
     var borderC by remember { mutableStateOf("000000") }
     fun on(id: String) = ui.isEnabled(id)
-    Surface(modifier, shape = RoundedCornerShape(10.dp), color = Color.White, shadowElevation = 10.dp, tonalElevation = 2.dp) {
+    Surface(modifier, shape = RoundedCornerShape(10.dp), color = SurfaceWhite, shadowElevation = 10.dp, tonalElevation = 2.dp) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             MiniMenu(Icons.Default.WrapText, "Wrap text", true, wrapEntries(d))
             MiniMenu(Icons.Default.RotateRight, "Rotate", true, rotateEntries(d))
@@ -254,7 +254,7 @@ internal fun tableFormulaEntries(d: Dispatcher, custom: () -> Unit) =
 fun TableBar(ui: EditorUiState, d: Dispatcher, modifier: Modifier = Modifier) {
     var formula by remember { mutableStateOf(false) }
     fun on(id: String) = ui.isEnabled(id)
-    Surface(modifier, shape = RoundedCornerShape(10.dp), color = Color.White, shadowElevation = 10.dp, tonalElevation = 2.dp) {
+    Surface(modifier, shape = RoundedCornerShape(10.dp), color = SurfaceWhite, shadowElevation = 10.dp, tonalElevation = 2.dp) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             MiniMenu(Icons.Default.AddBox, "Insert rows and columns", true, tableInsertEntries(d))
             MiniMenu(Icons.Default.Delete, "Delete", true, tableDeleteEntries(d))
@@ -401,7 +401,7 @@ fun PageBordersDialog(onDismiss: () -> Unit, onApply: (kind: String, style: Stri
                     BORDER_COLORS.forEach { c ->
                         Box(
                             Modifier.size(28.dp).background(hex(c), CircleShape)
-                                .border(if (color == c) 3.dp else 1.dp, if (color == c) WordBlue else Color.Gray, CircleShape).clickable { color = c },
+                                .border(if (color == c) 3.dp else 1.dp, if (color == c) WordBlue else RibbonLine, CircleShape).clickable { color = c },
                         )
                     }
                 }

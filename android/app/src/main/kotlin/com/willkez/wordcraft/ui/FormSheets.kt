@@ -253,7 +253,7 @@ private fun TocPreview(title: String, levels: Int, pageNumbers: Boolean, rightAl
         else -> ""
     }
     val shape = RoundedCornerShape(10.dp)
-    Column(Modifier.fillMaxWidth().clip(shape).background(RibbonPanel).border(1.dp, SheetLine, shape).padding(12.dp)) {
+    Column(Modifier.fillMaxWidth().clip(shape).background(Color(0xFFFAFAFA)).border(1.dp, SheetLine, shape).padding(12.dp)) {
         if (title.isNotBlank()) Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F4761), maxLines = 1)
         sample.filter { it.first <= levels }.forEachIndexed { i, (level, name) ->
             Row(Modifier.fillMaxWidth().padding(start = ((level - 1) * 14).dp, top = 5.dp), verticalAlignment = Alignment.CenterVertically) {

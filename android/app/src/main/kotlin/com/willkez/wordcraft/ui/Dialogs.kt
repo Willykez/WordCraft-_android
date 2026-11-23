@@ -159,6 +159,6 @@ private fun BsItem(label: String, icon: androidx.compose.ui.graphics.vector.Imag
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         if (icon != null) Icon(icon, null, tint = WordBlue, modifier = Modifier.size(22.dp)) else Spacer(Modifier.width(22.dp))
         Text(label, Modifier.padding(start = 16.dp).weight(1f), fontSize = 15.sp)
-        if (hint.isNotEmpty()) Text(hint, fontSize = 11.sp, color = Color.Gray)
+        if (hint.isNotEmpty()) Text(hint, fontSize = 11.sp, color = TextMuted)
     }
 }

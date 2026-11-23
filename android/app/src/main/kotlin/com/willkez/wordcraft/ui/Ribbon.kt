@@ -233,7 +233,7 @@ private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
     // ---- Styles gallery: Word-style tiles
     GroupBox("Styles") {
         Row(
-            Modifier.widthIn(max = 300.dp).background(SurfaceWhite).border(1.dp, RibbonLine, RoundedCornerShape(2.dp)).horizontalScroll(rememberScrollState()),
+            Modifier.widthIn(max = 300.dp).background(Color.White).border(1.dp, RibbonLine, RoundedCornerShape(2.dp)).horizontalScroll(rememberScrollState()),
         ) {
             styleTiles(ui.styles).forEach { spec ->
                 StyleTile(spec, styleMatches(st?.styleName, spec)) { d.id("para.style", mapOf("style" to spec.id)) }
@@ -308,7 +308,7 @@ fun HighlightMenu(enabled: Boolean, current: String?, onPick: (String) -> Unit) 
                         row.forEach { (name, label, argb) ->
                             Box(
                                 Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).background(Color(argb))
-                                    .border(if (name.equals(current, true)) 3.dp else 1.dp, if (name.equals(current, true)) WordBlue else Color(0x55000000), RoundedCornerShape(8.dp))
+                                    .border(if (name.equals(current, true)) 3.dp else 1.dp, if (name.equals(current, true)) WordBlue else RibbonIcon.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
                                     .semantics { contentDescription = label }
                                     .clickable { open = false; onPick(name) },
                             )

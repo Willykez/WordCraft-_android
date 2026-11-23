@@ -224,7 +224,7 @@ private fun CommentsContent(ui: EditorUiState, vm: EditorViewModel) {
     LaunchedEffect(rev) { load() }
     OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth(), label = { Text("New comment on selection") }, maxLines = 3)
     Button({ vm.run("review.newComment", mapOf("text" to draft)) { draft = ""; load() } }, Modifier.padding(vertical = 6.dp), enabled = draft.isNotBlank()) { Text("Add comment") }
-    if (items.isEmpty()) Text("No comments.", fontSize = 13.sp, color = Color.Gray)
+    if (items.isEmpty()) Text("No comments.", fontSize = 13.sp, color = TextMuted)
     items.forEach { c ->
         Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
             Column(Modifier.padding(8.dp)) {
@@ -258,14 +258,14 @@ private fun InfoContent(ui: EditorUiState, vm: EditorViewModel) {
     val o = info ?: return
     listOf("pages", "words", "paragraphs", "sections", "comments", "trackChanges", "encrypted").forEach { k ->
         if (o.has(k)) Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-            Text(k.replaceFirstChar { it.uppercase() }, Modifier.weight(1f), fontSize = 13.sp, color = Color.Gray)
+            Text(k.replaceFirstChar { it.uppercase() }, Modifier.weight(1f), fontSize = 13.sp, color = TextMuted)
             Text(o.opt(k).toString(), fontSize = 13.sp)
         }
     }
     o.optJSONObject("properties")?.let { p ->
         Spacer(Modifier.height(6.dp))
         p.keys().forEach { k -> if (!p.isNull(k) && p.optString(k).isNotBlank()) Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-            Text(k, Modifier.weight(1f), fontSize = 13.sp, color = Color.Gray); Text(p.optString(k), fontSize = 13.sp)
+            Text(k, Modifier.weight(1f), fontSize = 13.sp, color = TextMuted); Text(p.optString(k), fontSize = 13.sp)
         } }
     }
 }
@@ -291,7 +291,7 @@ private fun SearchContent(ui: EditorUiState, d: Dispatcher) {
     hits.forEach { c ->
         Column(Modifier.fillMaxWidth().clickable { d(c) }.padding(vertical = 6.dp)) {
             Text(c.label, fontSize = 14.sp)
-            Text(c.location + if (c.shortcut.isNotEmpty()) "  ·  ${c.shortcut.substringBefore(" / ")}" else "", fontSize = 11.sp, color = Color.Gray)
+            Text(c.location + if (c.shortcut.isNotEmpty()) "  ·  ${c.shortcut.substringBefore(" / ")}" else "", fontSize = 11.sp, color = TextMuted)
         }
     }
 }
@@ -330,7 +330,7 @@ private fun ReviewContent(ui: EditorUiState, vm: EditorViewModel) {
             AssistChip({ vm.run("review.acceptAll") { load() } }, { Text("Accept all") })
             AssistChip({ vm.run("review.rejectAll") { load() } }, { Text("Reject all") })
         }
-        if (changes.isEmpty()) Text("No tracked changes.", Modifier.padding(top = 8.dp), fontSize = 13.sp, color = Color.Gray)
+        if (changes.isEmpty()) Text("No tracked changes.", Modifier.padding(top = 8.dp), fontSize = 13.sp, color = TextMuted)
         changes.forEach { c ->
             val kind = when (c.optString("kind")) { "insert" -> "Inserted"; "delete" -> "Deleted"; "format" -> "Formatted"; "moveFrom" -> "Moved from"; "moveTo" -> "Moved to"; else -> c.optString("kind") }
             Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
@@ -347,12 +347,12 @@ private fun ReviewContent(ui: EditorUiState, vm: EditorViewModel) {
             }
         }
     } else {
-        if (issues.isEmpty()) Text("No spelling or grammar issues.", fontSize = 13.sp, color = Color.Gray)
+        if (issues.isEmpty()) Text("No spelling or grammar issues.", fontSize = 13.sp, color = TextMuted)
         issues.take(60).forEach { i ->
             val sugg = i.optJSONArray("suggestions")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty().take(4)
             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                 Text("${i.optString("text")} · ${if (i.optString("kind") == "grammar") "Grammar" else "Spelling"}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                if (i.optString("message").isNotBlank()) Text(i.optString("message"), fontSize = 11.sp, color = Color.Gray)
+                if (i.optString("message").isNotBlank()) Text(i.optString("message"), fontSize = 11.sp, color = TextMuted)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     sugg.forEach { sg -> AssistChip({ at(i) { vm.run("select.word") { vm.run("review.applySuggestion", mapOf("text" to sg)) { load() } } } }, { Text(sg) }) }
                     AssistChip({ at(i) { vm.run("select.word") { vm.run("review.ignoreAll") { load() } } } }, { Text("Ignore all") })

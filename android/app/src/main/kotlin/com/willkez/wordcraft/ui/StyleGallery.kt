@@ -49,7 +49,7 @@ fun styleMatches(current: String?, spec: StyleSpec): Boolean {
 fun StyleTile(spec: StyleSpec, selected: Boolean, width: Int = 86, onClick: () -> Unit) {
     // Flat tile inside the gallery strip: no card of its own; the current style gets a thin accent outline.
     Column(
-        Modifier.width(width.dp).background(SurfaceWhite)
+        Modifier.width(width.dp).background(Color.White)
             .then(if (selected) Modifier.border(1.5.dp, WordBlue, RoundedCornerShape(2.dp)) else Modifier)
             .clickable(onClick = onClick),
     ) {
@@ -61,9 +61,9 @@ fun StyleTile(spec: StyleSpec, selected: Boolean, width: Int = 86, onClick: () -
             )
         }
         Text(
-            spec.label, Modifier.fillMaxWidth().background(if (selected) tint(WordBlue, 0.16f) else SurfaceWhite).padding(vertical = 4.dp),
+            spec.label, Modifier.fillMaxWidth().background(if (selected) Color(0xFFE3ECFA) else Color.White).padding(vertical = 4.dp),
             fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            color = if (selected) WordBlue else TextMuted,
+            color = if (selected) WordBlue else Color(0xFF555555),
         )
     }
 }

@@ -223,7 +223,7 @@ fun MenuBtn(label: String, icon: ImageVector?, entries: List<MenuEntry>, enabled
                 DropdownMenuItem(
                     text = { Text(e.label, fontSize = 14.sp) },
                     enabled = e.enabled,
-                    trailingIcon = if (e.hint.isNotEmpty()) ({ Text(e.hint, fontSize = 11.sp, color = Color.Gray) }) else null,
+                    trailingIcon = if (e.hint.isNotEmpty()) ({ Text(e.hint, fontSize = 11.sp, color = TextMuted) }) else null,
                     onClick = { open = false; e.onClick() },
                 )
             }
@@ -267,7 +267,7 @@ fun GroupBox(title: String, content: @Composable () -> Unit) {
     Row(Modifier.height(IntrinsicSize.Min)) {
         Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(Modifier.heightIn(min = 60.dp), verticalAlignment = Alignment.CenterVertically) { content() }
-            Text(title, fontSize = 10.sp, color = Color(0xFF666666), maxLines = 1)
+            Text(title, fontSize = 10.sp, color = TextMuted, maxLines = 1)
         }
         VerticalDivider(Modifier.padding(vertical = 6.dp), color = RibbonLine)
     }
@@ -282,7 +282,7 @@ fun PanelSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
-val OutlineBorder = BorderStroke(1.dp, Color(0xFFCCCCCC))
+val OutlineBorder: BorderStroke get() = BorderStroke(1.dp, RibbonLine)
 
 /** An icon-only button that opens a drop-down (line spacing, change case…). */
 @Composable
@@ -301,7 +301,7 @@ fun MiniMenu(icon: ImageVector, label: String, enabled: Boolean = true, entries:
             entries.forEach { e ->
                 DropdownMenuItem(
                     text = { Text(e.label, fontSize = 14.sp) }, enabled = e.enabled,
-                    trailingIcon = if (e.hint.isNotEmpty()) ({ Text(e.hint, fontSize = 11.sp, color = Color.Gray) }) else null,
+                    trailingIcon = if (e.hint.isNotEmpty()) ({ Text(e.hint, fontSize = 11.sp, color = TextMuted) }) else null,
                     onClick = { open = false; e.onClick() },
                 )
             }
@@ -337,7 +337,7 @@ fun TableGridBtn(enabled: Boolean, onDialog: () -> Unit = {}, onPick: (rows: Int
         RBtn("Table ▾", Icons.Default.TableChart, enabled) { hr = 0; hc = 0; open = true }
         DropdownMenu(open, { open = false }) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                Text(if (hr > 0) "$hc × $hr table" else "Slide to size, release to insert", fontSize = 12.sp, color = Color.Gray)
+                Text(if (hr > 0) "$hc × $hr table" else "Slide to size, release to insert", fontSize = 12.sp, color = TextMuted)
                 Spacer(Modifier.height(6.dp))
                 Box(
                     Modifier.size(cell * 10, cell * 8).pointerInput(Unit) {
@@ -367,8 +367,8 @@ fun TableGridBtn(enabled: Boolean, onDialog: () -> Unit = {}, onPick: (rows: Int
                             val lit = r <= hr && c <= hc
                             val tl = androidx.compose.ui.geometry.Offset((c - 1) * step + 1f, (r - 1) * step + 1f)
                             val sz = androidx.compose.ui.geometry.Size(step - 2f, step - 2f)
-                            drawRect(if (lit) WordBlue.copy(alpha = 0.35f) else Color.White, tl, sz)
-                            drawRect(if (lit) WordBlue else Color(0xFFBBBBBB), tl, sz, style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f))
+                            drawRect(if (lit) WordBlue.copy(alpha = 0.35f) else SurfaceWhite, tl, sz)
+                            drawRect(if (lit) WordBlue else RibbonLine, tl, sz, style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f))
                         }
                     }
                 }
@@ -414,7 +414,7 @@ fun SmallMenuBtn(label: String, icon: ImageVector, enabled: Boolean = true, entr
             entries.forEach { e ->
                 DropdownMenuItem(
                     text = { Text(e.label, fontSize = 14.sp) }, enabled = e.enabled,
-                    trailingIcon = if (e.hint.isNotEmpty()) ({ Text(e.hint, fontSize = 11.sp, color = Color.Gray) }) else null,
+                    trailingIcon = if (e.hint.isNotEmpty()) ({ Text(e.hint, fontSize = 11.sp, color = TextMuted) }) else null,
                     onClick = { open = false; e.onClick() },
                 )
             }

@@ -41,7 +41,9 @@ val RibbonLine: Color get() = if (AppTheme.dark) Color(0xFF424248) else Color(0x
 /** Fields, tiles and cards that are white in the light theme. */
 val SurfaceWhite: Color get() = if (AppTheme.dark) Color(0xFF2E2E33) else Color.White
 /** Secondary text (labels, hints) on those surfaces. */
-val TextMuted: Color get() = if (AppTheme.dark) Color(0xFFA6A9B3) else Color(0xFF555555)
+val TextMuted: Color get() = if (AppTheme.dark) Color(0xFFA6A9B3) else Color(0xFF666666)
+/** Errors and "needs attention" text. */
+val Danger: Color get() = if (AppTheme.dark) Color(0xFFFF8A80) else Color(0xFFC00000)
 val ContextAccent = Color(0xFFC55A11)
 
 // ---- Rich palette: every tab, group, screen and file type gets its own colour ------------------

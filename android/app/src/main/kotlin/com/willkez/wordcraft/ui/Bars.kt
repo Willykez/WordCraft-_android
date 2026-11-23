@@ -108,12 +108,12 @@ fun ProofBar(ui: EditorUiState, vm: EditorViewModel, modifier: Modifier = Modifi
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     (if (grammar) "Grammar: " else "Spelling: ") + issue.optString("message").ifEmpty { "\"${issue.optString("text")}\"" },
-                    Modifier.weight(1f), fontSize = 12.sp, color = Color(0xFFC00000),
+                    Modifier.weight(1f), fontSize = 12.sp, color = Danger,
                 )
                 IconButton(vm::dismissIssue, Modifier.size(28.dp)) { Icon(Icons.Default.Close, "Dismiss", Modifier.size(16.dp)) }
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (suggestions.isEmpty()) Text("No suggestions", fontSize = 12.sp, color = Color.Gray)
+                if (suggestions.isEmpty()) Text("No suggestions", fontSize = 12.sp, color = TextMuted)
                 suggestions.forEach { sg -> AssistChip({ vm.fixIssue("review.applySuggestion", mapOf("text" to sg)) }, { Text(sg) }) }
                 VerticalDivider(Modifier.height(20.dp))
                 TextButton({ vm.fixIssue("review.ignoreAll") }) { Text("Ignore all", fontSize = 12.sp) }

@@ -71,7 +71,7 @@ private fun PanelSwatchRow(colors: List<String>, selected: String?, onPick: (Str
         colors.forEach { c ->
             Box(
                 Modifier.size(30.dp).background(col(c), CircleShape)
-                    .border(if (selected == c) 3.dp else 1.dp, if (selected == c) WordBlue else Color(0xFFBBBBBB), CircleShape).clickable { onPick(c) },
+                    .border(if (selected == c) 3.dp else 1.dp, if (selected == c) WordBlue else SheetLine, CircleShape).clickable { onPick(c) },
             )
         }
     }
@@ -80,7 +80,7 @@ private fun PanelSwatchRow(colors: List<String>, selected: String?, onPick: (Str
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF667085))
+        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = SheetMuted)
         content()
     }
 }
@@ -101,7 +101,7 @@ private fun humanize(name: String): String =
 internal fun FormContent(cmd: Cmd, vm: EditorViewModel) {
     val values = remember(cmd.id) { mutableStateMapOf<String, String>() }
     val missing = cmd.fields.any { !it.optional && values[it.name].isNullOrBlank() && it.kind != FieldKind.BOOL }
-    Text(cmd.location, fontSize = 11.sp, color = Color.Gray)
+    Text(cmd.location, fontSize = 11.sp, color = TextMuted)
     Spacer(Modifier.height(8.dp))
     cmd.fields.forEach { f ->
         val label = humanize(f.name) + if (f.optional) "" else " *"
@@ -154,7 +154,7 @@ private fun HeadingsTab(ui: EditorUiState, vm: EditorViewModel) {
     var heads by remember { mutableStateOf(listOf<HeadingItem>()) }
     val rev = ui.state?.revision
     LaunchedEffect(rev) { vm.loadHeadings { heads = it } }
-    if (heads.isEmpty()) Text("No headings yet. Apply a Heading style to build the outline.", fontSize = 13.sp, color = Color.Gray)
+    if (heads.isEmpty()) Text("No headings yet. Apply a Heading style to build the outline.", fontSize = 13.sp, color = TextMuted)
     heads.forEach { h ->
         val lvl = h.level.toInt()
         Text(
@@ -170,7 +170,7 @@ private fun PagesTab(ui: EditorUiState, vm: EditorViewModel) {
     val n = ui.pages.size
     val rev = ui.state?.revision
     val current = ui.caret?.page?.toInt() ?: 0
-    if (n == 0) Text("No pages.", fontSize = 13.sp, color = Color.Gray)
+    if (n == 0) Text("No pages.", fontSize = 13.sp, color = TextMuted)
     (0 until n.coerceAtMost(80)).chunked(2).forEach { rowIdx ->
         Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             rowIdx.forEach { i ->
@@ -179,9 +179,9 @@ private fun PagesTab(ui: EditorUiState, vm: EditorViewModel) {
                 Column(Modifier.weight(1f).clickable { vm.goToPage(i) }, horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
                         Modifier.fillMaxWidth().aspectRatio((page.widthPt.toFloat() / page.heightPt.toFloat()).coerceIn(0.4f, 2.5f)).background(Color.White)
-                            .border(if (i == current) 3.dp else 1.dp, if (i == current) WordBlue else Color(0xFFD0D5DD), RoundedCornerShape(3.dp)),
+                            .border(if (i == current) 3.dp else 1.dp, if (i == current) WordBlue else SheetLine, RoundedCornerShape(3.dp)),
                     ) { bmp?.let { Image(it, "Page ${i + 1}", Modifier.fillMaxSize()) } }
-                    Text("${i + 1}", fontSize = 11.sp, color = if (i == current) WordBlue else Color.Gray, modifier = Modifier.padding(top = 3.dp))
+                    Text("${i + 1}", fontSize = 11.sp, color = if (i == current) WordBlue else TextMuted, modifier = Modifier.padding(top = 3.dp))
                 }
             }
             if (rowIdx.size == 1) Spacer(Modifier.weight(1f))
@@ -205,15 +205,15 @@ private fun ResultsTab(vm: EditorViewModel) {
         Pill("Match case", matchCase) { matchCase = !matchCase }
         Pill("Whole word", whole) { whole = !whole }
     }
-    if (q.length >= 2) Text("${hits.size}${if (hits.size >= 300) "+" else ""} result${if (hits.size == 1) "" else "s"}", fontSize = 12.sp, color = Color.Gray)
+    if (q.length >= 2) Text("${hits.size}${if (hits.size >= 300) "+" else ""} result${if (hits.size == 1) "" else "s"}", fontSize = 12.sp, color = TextMuted)
     hits.forEach { h ->
         val s = h.matchStart.toInt(); val l = h.matchLen.toInt()
         val text = buildAnnotatedString {
             append(h.snippet.take(s))
-            withStyle(SpanStyle(fontWeight = FontWeight.Bold, background = Color(0xFFFFF3A8))) { append(h.snippet.drop(s).take(l)) }
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color(0xFF1B1B1B), background = Color(0xFFFFF3A8))) { append(h.snippet.drop(s).take(l)) }
             append(h.snippet.drop(s + l))
         }
         Text(text, Modifier.fillMaxWidth().clickable { vm.jumpTo(h.start, h.end) }.padding(vertical = 7.dp), fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        HorizontalDivider(color = Color(0xFFEAECF0))
+        HorizontalDivider(color = SheetLine)
     }
 }

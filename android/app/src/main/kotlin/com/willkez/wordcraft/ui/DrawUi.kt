@@ -42,7 +42,7 @@ private fun InkMore(current: String, onPick: (String) -> Unit) {
     Box(
         Modifier.size(28.dp).background(
             Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)), CircleShape,
-        ).border(1.dp, Color(0xFFBBBBBB), CircleShape).clickable { open = true },
+        ).border(1.dp, RibbonLine, CircleShape).clickable { open = true },
         contentAlignment = Alignment.Center,
     ) { Text("+", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
     if (open) CustomColorDialog(current, { open = false }) { open = false; onPick(it) }
@@ -52,23 +52,23 @@ private fun InkMore(current: String, onPick: (String) -> Unit) {
 private fun InkSwatch(hex: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.size(28.dp).background(ink(hex), CircleShape)
-            .border(if (selected) 3.dp else 1.dp, if (selected) WordBlue else Color(0xFFBBBBBB), CircleShape).clickable(onClick = onClick),
+            .border(if (selected) 3.dp else 1.dp, if (selected) WordBlue else RibbonLine, CircleShape).clickable(onClick = onClick),
     )
 }
 
 @Composable
 private fun WidthDot(w: Float, selected: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(if (selected) Color(0xFFDCE8FA) else Color(0xFFF2F4F7)).clickable(onClick = onClick),
+        Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(if (selected) tint(WordBlue, 0.18f) else tint(RibbonIcon, 0.10f)).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Box(Modifier.size(width = 20.dp, height = (w.coerceAtMost(10f) + 1f).dp).background(Color(0xFF242424), RoundedCornerShape(4.dp))) }
+    ) { Box(Modifier.size(width = 20.dp, height = (w.coerceAtMost(10f) + 1f).dp).background(RibbonInk, RoundedCornerShape(4.dp))) }
 }
 
 /** The bar shown while a Draw tool is active: tool, thickness, colour, and Done. */
 @Composable
 fun DrawBar(ui: EditorUiState, vm: EditorViewModel, modifier: Modifier = Modifier) {
     val tool = ui.drawTool ?: return
-    Surface(modifier, shape = RoundedCornerShape(12.dp), color = Color.White, shadowElevation = 10.dp, tonalElevation = 2.dp) {
+    Surface(modifier, shape = RoundedCornerShape(12.dp), color = SurfaceWhite, shadowElevation = 10.dp, tonalElevation = 2.dp) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 listOf(
@@ -82,7 +82,7 @@ fun DrawBar(ui: EditorUiState, vm: EditorViewModel, modifier: Modifier = Modifie
             }
             if (tool == "lasso") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (ui.lassoCount > 0) "${ui.lassoCount} stroke${if (ui.lassoCount == 1) "" else "s"} selected" else "Draw a loop around the ink to select it", fontSize = 12.sp, color = Color.DarkGray, modifier = Modifier.weight(1f, fill = false))
+                    Text(if (ui.lassoCount > 0) "${ui.lassoCount} stroke${if (ui.lassoCount == 1) "" else "s"} selected" else "Draw a loop around the ink to select it", fontSize = 12.sp, color = TextMuted, modifier = Modifier.weight(1f, fill = false))
                     if (ui.lassoCount > 0) {
                         OutlinedButton({ vm.lassoDelete() }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text("Delete", fontSize = 12.sp) }
                         TextButton({ vm.lassoClear() }) { Text("Clear", fontSize = 12.sp) }
@@ -98,9 +98,9 @@ fun DrawBar(ui: EditorUiState, vm: EditorViewModel, modifier: Modifier = Modifie
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(ui.stylusOnly, { vm.toggleStylusOnly() }, Modifier.height(24.dp))
-                Text("  Stylus only", fontSize = 12.sp, color = Color.DarkGray)
+                Text("  Stylus only", fontSize = 12.sp, color = TextMuted)
                 Spacer(Modifier.weight(1f))
-                Text(if (ui.stylusOnly) "Fingers scroll" else "Fingers draw", fontSize = 11.sp, color = Color.Gray)
+                Text(if (ui.stylusOnly) "Fingers scroll" else "Fingers draw", fontSize = 11.sp, color = TextMuted)
             }
         }
     }
@@ -112,7 +112,7 @@ private fun PenTile(label: String, color: Color, widthPt: Float, selected: Boole
     Column(
         Modifier.width(62.dp).padding(horizontal = 2.dp).clip(RoundedCornerShape(8.dp))
             .background(if (selected) tint(WordBlue, 0.16f) else SurfaceWhite)
-            .border(if (selected) 2.dp else 1.dp, if (selected) WordBlue else Color(0xFFD5D5D5), RoundedCornerShape(8.dp))
+            .border(if (selected) 2.dp else 1.dp, if (selected) WordBlue else RibbonLine, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick).padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

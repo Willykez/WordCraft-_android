@@ -144,7 +144,7 @@ fun HomeScreen(
                         trailingIcon = { if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Icons.Default.Close, "Clear") } },
                         shape = RoundedCornerShape(28.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color.White, unfocusedContainerColor = Color.White,
+                            focusedContainerColor = SurfaceWhite, unfocusedContainerColor = SurfaceWhite,
                             focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
                         ),
                     )
@@ -168,7 +168,7 @@ fun HomeScreen(
                             Text("Recover unsaved work", fontWeight = FontWeight.SemiBold)
                             Text(
                                 "${r.name} · autosaved " + DateUtils.getRelativeTimeSpanString(r.savedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE),
-                                fontSize = 13.sp, color = Color.DarkGray,
+                                fontSize = 13.sp, color = TextMuted,
                             )
                             Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onRecover, colors = ButtonDefaults.buttonColors(containerColor = WordBlue)) { Text("Recover") }
@@ -262,7 +262,7 @@ private fun EmptyState(noneAtAll: Boolean, onOpenFile: () -> Unit) {
         Text(if (noneAtAll) "No documents yet" else "Nothing matches", fontSize = 16.sp, fontWeight = FontWeight.Medium)
         Text(
             if (noneAtAll) "Documents you create, open, save or export show up here." else "Try a different search or filter.",
-            fontSize = 13.sp, color = Color.Gray,
+            fontSize = 13.sp, color = TextMuted,
         )
         if (noneAtAll) TextButton(onOpenFile) { Text("Open a file") }
     }
@@ -276,7 +276,7 @@ private fun TemplateCard(name: String, key: String, hint: String, color: Color, 
                 .border(2.dp, color, RoundedCornerShape(8.dp)),
         ) { PaperPreview(key, color) }
         Text(name, Modifier.padding(top = 6.dp), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(hint, fontSize = 11.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(hint, fontSize = 11.sp, color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -341,7 +341,7 @@ private fun RecentRow(r: RecentDoc, thumbFor: (String) -> android.graphics.Bitma
             if (thumb != null) {
                 Image(
                     thumb, "Preview of ${r.name}",
-                    Modifier.height(64.dp).aspectRatio(thumb.width.toFloat() / thumb.height).clip(RoundedCornerShape(4.dp)).border(1.dp, Color(0xFFD6D9DF), RoundedCornerShape(4.dp)),
+                    Modifier.height(64.dp).aspectRatio(thumb.width.toFloat() / thumb.height).clip(RoundedCornerShape(4.dp)).border(1.dp, RibbonLine, RoundedCornerShape(4.dp)),
                     contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                 )
             } else TypeTile(r)
@@ -350,9 +350,9 @@ private fun RecentRow(r: RecentDoc, thumbFor: (String) -> android.graphics.Bitma
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         when (r.action) { "Saved" -> Icons.Default.Save; "Exported" -> Icons.Default.Share; else -> Icons.Default.FolderOpen },
-                        null, Modifier.size(13.dp), tint = Color.Gray,
+                        null, Modifier.size(13.dp), tint = TextMuted,
                     )
-                    Text("  ${r.action} · $whenText", fontSize = 12.sp, color = Color.Gray, maxLines = 1)
+                    Text("  ${r.action} · $whenText", fontSize = 12.sp, color = TextMuted, maxLines = 1)
                 }
             }
             if (r.pinned) Icon(Icons.Default.Star, "Pinned", Modifier.size(18.dp), tint = Color(0xFFF2B01E))

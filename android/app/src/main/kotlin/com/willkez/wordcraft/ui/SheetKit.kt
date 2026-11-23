@@ -56,9 +56,9 @@ import androidx.compose.ui.unit.sp
 internal val SheetLine: Color get() = if (AppTheme.dark) Color(0xFF3C3C42) else Color(0xFFE4E7EC)
 internal val SheetMuted: Color get() = if (AppTheme.dark) Color(0xFFA6A9B3) else Color(0xFF667085)
 internal val SheetInk: Color get() = if (AppTheme.dark) Color(0xFFEDEDF1) else Color(0xFF1B1B1B)
-internal val PanelBg = Color(0xFFFFFFFF)
-internal val PillOn = Color(0xFFDCE8FA)
-internal val PillIdle = Color(0xFFF2F4F7)
+internal val PanelBg: Color get() = if (AppTheme.dark) Color(0xFF232326) else Color(0xFFFFFFFF)
+internal val PillOn: Color get() = if (AppTheme.dark) Color(0xFF33425F) else Color(0xFFDCE8FA)
+internal val PillIdle: Color get() = if (AppTheme.dark) Color(0xFF38383E) else Color(0xFFF2F4F7)
 
 internal val LINE_COLORS = listOf("000000", "595959", "A6A6A6", "C00000", "ED7D31", "FFC000", "548235", "00B0F0", "185ABD", "7030A0")
 internal val SHADE_COLORS = listOf("FFFFFF", "F2F2F2", "D9D9D9", "FFF2CC", "FCE4D6", "E2EFDA", "DDEBF7", "E4DFEC", "FFFF00", "BDD7EE", "C6E0B4")
@@ -128,7 +128,7 @@ fun SwatchRow(selected: String?, colors: List<String>, onPick: (String) -> Unit)
                     .background(swatchColor, CircleShape)
                     .border(
                         width = if (isSelected) 3.dp else 1.dp,
-                        color = if (isSelected) WordBlue else Color(0xFFBBBBBB),
+                        color = if (isSelected) WordBlue else SheetLine,
                         shape = CircleShape,
                     )
                     .clickable { onPick(hex) },

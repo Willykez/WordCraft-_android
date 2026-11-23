@@ -41,7 +41,7 @@ fun SaveFolderDialog(folder: String?, askEveryTime: Boolean, onChoose: () -> Uni
                     Text("Ask for a folder every time", Modifier.weight(1f), fontSize = 14.sp)
                     Switch(askEveryTime, onAskEveryTime)
                 }
-                Text("Files that already exist get a number: report.pdf, report(1).pdf, report(2).pdf.", fontSize = 12.sp, color = Color.Gray)
+                Text("Files that already exist get a number: report.pdf, report(1).pdf, report(2).pdf.", fontSize = 12.sp, color = TextMuted)
             }
         },
         confirmButton = { TextButton(onChoose) { Text(if (folder == null) "Choose folder" else "Change folder") } },

@@ -217,7 +217,7 @@ fun InsertTableSheet(d: Dispatcher, onDismiss: () -> Unit) {
         // A little preview so the size is obvious before inserting.
         Column(Modifier.padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             for (r in 1..minOf(rows, 6)) Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                for (c in 1..minOf(cols, 10)) Box(Modifier.size(22.dp, 14.dp).background(Color.White).border(1.dp, WordBlue))
+                for (c in 1..minOf(cols, 10)) Box(Modifier.size(22.dp, 14.dp).background(SurfaceWhite).border(1.dp, WordBlue))
             }
         }
         PrimaryButton("Insert $cols × $rows table") { d.id("insert.table", mapOf("rows" to rows, "cols" to cols)); onDismiss() }
@@ -339,7 +339,7 @@ fun IconsSheet(vm: EditorViewModel, d: Dispatcher, onDismiss: () -> Unit) {
             hits.take(120).forEach { h ->
                 val on = picked?.id == h.id
                 Row(
-                    Modifier.fillMaxWidth().clickable { picked = h }.background(if (on) Color(0xFFE3ECFA) else Color.Transparent).padding(horizontal = 8.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().clickable { picked = h }.background(if (on) tint(WordBlue, 0.18f) else Color.Transparent).padding(horizontal = 8.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(h.name, Modifier.weight(1f), fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = SheetInk)

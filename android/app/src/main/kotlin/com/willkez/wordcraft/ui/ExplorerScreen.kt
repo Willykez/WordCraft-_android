@@ -136,7 +136,7 @@ fun ExplorerScreen(
                     Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.SearchOff, null, Modifier.size(52.dp), tint = PaletteIndigo)
                         Text(if (docs.isEmpty()) "No documents found yet" else "Nothing matches", fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                        Text("Pull the rescan button after saving or copying files.", fontSize = 13.sp, color = Color.Gray)
+                        Text("Pull the rescan button after saving or copying files.", fontSize = 13.sp, color = TextMuted)
                     }
                 }
                 items(shown, key = { it.uri }) { d -> DocRow(d, Formatter.formatShortFileSize(ctx, d.size)) { onOpen(d) } }
@@ -161,9 +161,9 @@ private fun DocRow(d: DeviceDoc, size: String, onClick: () -> Unit) {
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(d.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(d.folder, fontSize = 12.sp, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("$size · $whenText", fontSize = 11.sp, color = Color.Gray, maxLines = 1)
+                Text("$size · $whenText", fontSize = 11.sp, color = TextMuted, maxLines = 1)
             }
-            if (!d.editable) Icon(Icons.Default.OpenInNew, "Opens in another app", Modifier.size(18.dp), tint = Color.Gray)
+            if (!d.editable) Icon(Icons.Default.OpenInNew, "Opens in another app", Modifier.size(18.dp), tint = TextMuted)
         }
     }
 }

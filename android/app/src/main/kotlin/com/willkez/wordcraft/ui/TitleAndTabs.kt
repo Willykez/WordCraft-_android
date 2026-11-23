@@ -90,7 +90,7 @@ private fun TabLabel(text: String, selected: Boolean, color: Color, bold: Boolea
     Box(Modifier.height(36.dp).clickable(onClick = onClick).padding(horizontal = 13.dp), contentAlignment = Alignment.Center) {
         Text(
             text, fontSize = 13.sp, maxLines = 1,
-            color = when { selected -> color; contextual -> color; bold -> color; else -> Color(0xFF444444) },
+            color = when { selected -> color; contextual -> color; bold -> color; else -> RibbonInk },
             fontWeight = if (selected || bold) FontWeight.SemiBold else FontWeight.Normal,
         )
         if (selected) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp).background(color))
