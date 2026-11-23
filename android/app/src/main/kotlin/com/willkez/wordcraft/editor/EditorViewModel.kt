@@ -537,8 +537,23 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     // ---- pointer input (page points) ---------------------------------------------------------
 
     /** Commit a drag on the selection handles: size always, position too for floating objects. */
-    fun resizeObject(page: Int, x: Float, y: Float, w: Float, h: Float, move: Boolean) =
-        run("arrange.bounds", buildMap<String, Any> { put("width", w); put("height", h); if (move) { put("x", x); put("y", y); put("page", page) } })
+    /**
+     * A finished drag of an object's frame. Pictures and shapes take `arrange.bounds`; charts and SmartArt
+     * refuse it (they can't be moved yet) but are laid out again at a new size by `picture.size`, so that
+     * is the fallback. Either way the frame is refreshed from the engine afterwards.
+     */
+    fun resizeObject(page: Int, x: Float, y: Float, w: Float, h: Float, move: Boolean) = launchEngine {
+        val s = session ?: return@launchEngine
+        val bounds = JSONObject().put("width", w.toDouble()).put("height", h.toDouble())
+        if (move) bounds.put("x", x.toDouble()).put("y", y.toDouble()).put("page", page)
+        val first = runCatching { s.execute("arrange.bounds", bounds.toString()) }.exceptionOrNull()
+        if (first != null) {
+            val size = JSONObject().put("width", w.toDouble()).put("height", h.toDouble()).put("lockAspect", false)
+            val second = runCatching { s.execute("picture.size", size.toString()) }.exceptionOrNull()
+            if (second != null) say(first.message ?: "Could not resize that object")
+        }
+        refresh()
+    }
 
     /** Ruler drags: any of the three indents (points), or a tab stop moved / added / cleared. */
     fun setIndents(left: Float?, right: Float?, first: Float?) =

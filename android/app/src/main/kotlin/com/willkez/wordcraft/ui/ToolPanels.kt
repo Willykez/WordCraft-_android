@@ -40,8 +40,8 @@ import com.willkez.wordcraft.bridge.SearchHit
 // Shared pieces
 // ---------------------------------------------------------------------------------------------
 
-private val PILL_ON = Color(0xFFDCE8FA)
-private val PILL_OFF = Color(0xFFF2F4F7)
+private val PILL_ON: Color get() = if (AppTheme.dark) Color(0xFF33425F) else Color(0xFFDCE8FA)
+private val PILL_OFF: Color get() = if (AppTheme.dark) Color(0xFF38383E) else Color(0xFFF2F4F7)
 
 @Composable
 fun Pill(label: String, selected: Boolean, onClick: () -> Unit) {
@@ -49,7 +49,7 @@ fun Pill(label: String, selected: Boolean, onClick: () -> Unit) {
         Modifier.clip(RoundedCornerShape(50)).background(if (selected) PILL_ON else PILL_OFF)
             .border(if (selected) 1.5.dp else 0.dp, if (selected) WordBlue else Color.Transparent, RoundedCornerShape(50))
             .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp),
-    ) { Text(label, fontSize = 13.sp, color = if (selected) WordBlue else Color(0xFF344054), fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal) }
+    ) { Text(label, fontSize = 13.sp, color = if (selected) (if (AppTheme.dark) Color(0xFF9DBBFF) else WordBlue) else SheetInk, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal) }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

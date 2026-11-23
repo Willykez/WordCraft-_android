@@ -233,7 +233,7 @@ private fun HomeGroups(ui: EditorUiState, d: Dispatcher) {
     // ---- Styles gallery: Word-style tiles
     GroupBox("Styles") {
         Row(
-            Modifier.widthIn(max = 300.dp).background(Color.White).border(1.dp, Color(0xFFC9C9C9), RoundedCornerShape(2.dp)).horizontalScroll(rememberScrollState()),
+            Modifier.widthIn(max = 300.dp).background(SurfaceWhite).border(1.dp, RibbonLine, RoundedCornerShape(2.dp)).horizontalScroll(rememberScrollState()),
         ) {
             styleTiles(ui.styles).forEach { spec ->
                 StyleTile(spec, styleMatches(st?.styleName, spec)) { d.id("para.style", mapOf("style" to spec.id)) }

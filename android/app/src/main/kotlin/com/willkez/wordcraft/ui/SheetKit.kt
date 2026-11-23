@@ -53,9 +53,9 @@ import androidx.compose.ui.unit.sp
 // kept separate so neither file has to match the other's conventions.
 // ---------------------------------------------------------------------------------------------
 
-internal val SheetLine = Color(0xFFE4E7EC)
-internal val SheetMuted = Color(0xFF667085)
-internal val SheetInk = Color(0xFF1B1B1B)
+internal val SheetLine: Color get() = if (AppTheme.dark) Color(0xFF3C3C42) else Color(0xFFE4E7EC)
+internal val SheetMuted: Color get() = if (AppTheme.dark) Color(0xFFA6A9B3) else Color(0xFF667085)
+internal val SheetInk: Color get() = if (AppTheme.dark) Color(0xFFEDEDF1) else Color(0xFF1B1B1B)
 internal val PanelBg = Color(0xFFFFFFFF)
 internal val PillOn = Color(0xFFDCE8FA)
 internal val PillIdle = Color(0xFFF2F4F7)

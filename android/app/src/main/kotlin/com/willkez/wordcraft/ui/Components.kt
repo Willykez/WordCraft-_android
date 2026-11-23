@@ -237,7 +237,7 @@ fun Combo(value: String, width: Int, entries: List<MenuEntry>) {
     var open by remember { mutableStateOf(false) }
     Box {
         Row(
-            Modifier.width(width.dp).height(28.dp).background(Color.White).border(1.dp, Color(0xFFBDBDBD), RoundedCornerShape(2.dp))
+            Modifier.width(width.dp).height(28.dp).background(SurfaceWhite).border(1.dp, RibbonLine, RoundedCornerShape(2.dp))
                 .clickable { open = true }.padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

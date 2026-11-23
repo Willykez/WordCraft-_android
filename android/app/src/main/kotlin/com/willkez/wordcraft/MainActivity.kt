@@ -85,8 +85,12 @@ class MainActivity : ComponentActivity() {
         )
         if (savedInstanceState == null) intent?.data?.let { vm.openDocument(it) }
         AppTheme.index = getSharedPreferences("settings", MODE_PRIVATE).getInt("theme", 0)
+        AppTheme.mode = getSharedPreferences("settings", MODE_PRIVATE).getInt("theme_mode", 0)
         setContent {
-            val dark = isSystemInDarkTheme()
+            // Appearance: the phone's setting, or the user's own choice (File › App theme).
+            val systemDark = isSystemInDarkTheme()
+            val dark = when (AppTheme.mode) { 1 -> false; 2 -> true; else -> systemDark }
+            AppTheme.dark = dark
             val ctx = LocalContext.current
             // One branded palette everywhere (wallpaper colours made dialogs and chips clash with the Word-blue UI).
             val accent = com.willkez.wordcraft.ui.WordBlue
@@ -267,7 +271,8 @@ class MainActivity : ComponentActivity() {
         }
         if (themeDialog) {
             ThemeDialog(
-                selected = AppTheme.index,
+                selected = AppTheme.index, mode = AppTheme.mode,
+                onMode = { AppTheme.mode = it; getSharedPreferences("settings", MODE_PRIVATE).edit().putInt("theme_mode", it).apply() },
                 onPick = { AppTheme.index = it; getSharedPreferences("settings", MODE_PRIVATE).edit().putInt("theme", it).apply() },
                 onDismiss = { themeDialog = false },
             )

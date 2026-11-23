@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -49,16 +51,21 @@ fun SaveFolderDialog(folder: String?, askEveryTime: Boolean, onChoose: () -> Uni
 
 /** The app's accent theme (title bar, buttons, headers). Document colours are chosen separately in the ribbon. */
 @Composable
-fun ThemeDialog(selected: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+fun ThemeDialog(selected: Int, mode: Int, onPick: (Int) -> Unit, onMode: (Int) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("App theme") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Appearance", fontSize = 12.sp, color = SheetMuted)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("Phone setting", "Light", "Dark").forEachIndexed { i, n -> Pill(n, mode == i) { onMode(i) } }
+                }
+                Text("Accent colour", fontSize = 12.sp, color = SheetMuted, modifier = Modifier.padding(top = 6.dp))
                 AppTheme.specs.forEachIndexed { i, spec ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                            .border(if (i == selected) 2.dp else 1.dp, if (i == selected) spec.primary else Color(0x22000000), RoundedCornerShape(12.dp))
+                            .border(if (i == selected) 2.dp else 1.dp, if (i == selected) spec.primary else SheetLine, RoundedCornerShape(12.dp))
                             .clickable { onPick(i) }.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

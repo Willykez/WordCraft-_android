@@ -68,7 +68,7 @@ fun ExplorerScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFE3EEFF), Color(0xFFF0E6FF), Color(0xFFFFE8F1))))) {
+    Box(Modifier.fillMaxSize().background(PageWash)) {
         Column(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxWidth().background(Brush.linearGradient(ThemeGradient)).statusBarsPadding().padding(bottom = 12.dp)) {
                 Row(Modifier.height(52.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -97,7 +97,7 @@ fun ExplorerScreen(
                     trailingIcon = { if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Icons.Default.Close, "Clear") } },
                     shape = RoundedCornerShape(28.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White, unfocusedContainerColor = Color.White,
+                        focusedContainerColor = SurfaceWhite, unfocusedContainerColor = SurfaceWhite,
                         focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
                     ),
                 )
@@ -117,13 +117,13 @@ fun ExplorerScreen(
                 if (!fullAccess) item {
                     Card(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4E0)), shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = tint(PaletteAmber, 0.18f)), shape = RoundedCornerShape(12.dp),
                     ) {
                         Column(Modifier.padding(14.dp)) {
                             Text("Only some documents are visible", fontWeight = FontWeight.SemiBold)
                             Text(
                                 "Android hides documents saved by other apps. Allow access to all files to list every document on this device.",
-                                fontSize = 13.sp, color = Color.DarkGray,
+                                fontSize = 13.sp, color = TextMuted,
                             )
                             Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(onGrantAccess, colors = ButtonDefaults.buttonColors(containerColor = PaletteOrange)) { Text("Allow access") }

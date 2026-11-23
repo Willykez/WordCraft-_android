@@ -111,7 +111,7 @@ fun DrawBar(ui: EditorUiState, vm: EditorViewModel, modifier: Modifier = Modifie
 private fun PenTile(label: String, color: Color, widthPt: Float, selected: Boolean, translucent: Boolean, onClick: () -> Unit) {
     Column(
         Modifier.width(62.dp).padding(horizontal = 2.dp).clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Color(0xFFDCE8FA) else Color.White)
+            .background(if (selected) tint(WordBlue, 0.16f) else SurfaceWhite)
             .border(if (selected) 2.dp else 1.dp, if (selected) WordBlue else Color(0xFFD5D5D5), RoundedCornerShape(8.dp))
             .clickable(onClick = onClick).padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

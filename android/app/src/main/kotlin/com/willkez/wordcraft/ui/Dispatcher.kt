@@ -3,6 +3,7 @@ package com.willkez.wordcraft.ui
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -21,17 +22,26 @@ object AppTheme {
         Spec("Slate", Color(0xFF455A64), Color(0xFF263238), listOf(Color(0xFF455A64), Color(0xFF3949AB), Color(0xFF2B579A), Color(0xFF00897B))),
     )
     var index by mutableIntStateOf(0)
+    /** 0 = follow the phone's setting, 1 = light, 2 = dark. */
+    var mode by mutableIntStateOf(0)
+    /** The look in effect right now (what `mode` resolves to). */
+    var dark by mutableStateOf(false)
     val current: Spec get() = specs[index.coerceIn(specs.indices)]
 }
 val WordBlue: Color get() = AppTheme.current.primary
 val WordBlueDark: Color get() = AppTheme.current.dark
 val ThemeGradient: List<Color> get() = AppTheme.current.gradient
-val RibbonBg = Color(0xFFF3F3F3)
+// Neutral chrome that follows the light/dark choice (AppTheme.dark). Getters, so every use is theme-aware.
+val RibbonBg: Color get() = if (AppTheme.dark) Color(0xFF2A2A2E) else Color(0xFFF3F3F3)
 /** The flat ribbon surface, its icon ink and the hairlines between groups: neutral, like the desktop app. */
-val RibbonPanel = Color(0xFFFAFAFA)
-val RibbonInk = Color(0xFF222222)
-val RibbonIcon = Color(0xFF3D3D3D)
-val RibbonLine = Color(0xFFDADADA)
+val RibbonPanel: Color get() = if (AppTheme.dark) Color(0xFF232326) else Color(0xFFFAFAFA)
+val RibbonInk: Color get() = if (AppTheme.dark) Color(0xFFE8E8EC) else Color(0xFF222222)
+val RibbonIcon: Color get() = if (AppTheme.dark) Color(0xFFD2D2D8) else Color(0xFF3D3D3D)
+val RibbonLine: Color get() = if (AppTheme.dark) Color(0xFF424248) else Color(0xFFDADADA)
+/** Fields, tiles and cards that are white in the light theme. */
+val SurfaceWhite: Color get() = if (AppTheme.dark) Color(0xFF2E2E33) else Color.White
+/** Secondary text (labels, hints) on those surfaces. */
+val TextMuted: Color get() = if (AppTheme.dark) Color(0xFFA6A9B3) else Color(0xFF555555)
 val ContextAccent = Color(0xFFC55A11)
 
 // ---- Rich palette: every tab, group, screen and file type gets its own colour ------------------
@@ -63,14 +73,21 @@ fun tabColor(tab: String): Color = when (tab) {
 }
 
 /** A pale wash of `c` (0 = white, 1 = full colour), for backgrounds that should still read as that colour. */
-fun tint(c: Color, amount: Float = 0.12f): Color = lerp(Color.White, c, amount)
+fun tint(c: Color, amount: Float = 0.12f): Color = lerp(if (AppTheme.dark) Color(0xFF1F1F23) else Color.White, c, amount)
 
 /** The accent of the ribbon tab being drawn; group titles, dividers and toggles pick it up. */
 val LocalAccent = compositionLocalOf { WordBlue }
 
 /** Workspace behind the pages: a soft multi-colour wash instead of flat grey. */
-val WorkspaceBrush: Brush = Brush.linearGradient(
-    listOf(Color(0xFFBBD7FF), Color(0xFFD9C8FF), Color(0xFFFFC9E0), Color(0xFFFFE0B8)),
+val WorkspaceBrush: Brush get() = Brush.linearGradient(
+    if (AppTheme.dark) listOf(Color(0xFF1C2433), Color(0xFF261F36), Color(0xFF331F2B), Color(0xFF332A1E))
+    else listOf(Color(0xFFBBD7FF), Color(0xFFD9C8FF), Color(0xFFFFC9E0), Color(0xFFFFE0B8)),
+)
+
+/** Background wash of the home and explorer screens. */
+val PageWash: Brush get() = Brush.verticalGradient(
+    if (AppTheme.dark) listOf(Color(0xFF16181F), Color(0xFF1B1824), Color(0xFF21171E), Color(0xFF211C16))
+    else listOf(Color(0xFFE3EEFF), Color(0xFFF0E6FF), Color(0xFFFFE8F1), Color(0xFFFFF1DC)),
 )
 
 /** Colour and short label for a document type (home screen, recent list, explorer). */

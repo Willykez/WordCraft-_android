@@ -35,7 +35,6 @@ import com.willkez.wordcraft.data.RecentDoc
 import com.willkez.wordcraft.data.Recovery
 import java.util.Calendar
 
-private val PageWash = Brush.verticalGradient(listOf(Color(0xFFE3EEFF), Color(0xFFF0E6FF), Color(0xFFFFE8F1), Color(0xFFFFF1DC)))
 private fun templateColor(key: String): Color = when (key) {
     "blank" -> PaletteBlue; "letter" -> PaletteTeal; "resume" -> PalettePurple; "report" -> PaletteOrange; "sample" -> PalettePink
     else -> WordBlue
@@ -163,7 +162,7 @@ fun HomeScreen(
                 item {
                     Card(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4E0)), shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = tint(PaletteAmber, 0.18f)), shape = RoundedCornerShape(12.dp),
                     ) {
                         Column(Modifier.padding(14.dp)) {
                             Text("Recover unsaved work", fontWeight = FontWeight.SemiBold)

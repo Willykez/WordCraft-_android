@@ -43,7 +43,7 @@ fun QuickBar(ui: EditorUiState, d: Dispatcher, vm: EditorViewModel, keyboardShow
     fun q(id: String, icon: ImageVector, label: String, active: Boolean = false, enabled: Boolean = ui.isEnabled(id), onClick: () -> Unit = { d.id(id) }) =
         MiniToggle(icon, label, active, enabled, onClick)
 
-    Surface(color = Color.White, shadowElevation = 12.dp, tonalElevation = 2.dp) {
+    Surface(color = SurfaceWhite, shadowElevation = 12.dp, tonalElevation = 2.dp) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             QuickIcon(if (keyboardShown) Icons.Default.KeyboardHide else Icons.Default.Keyboard, "Keyboard", false, true, onKeyboard)
             if (st?.hasSelection == true) {
@@ -81,7 +81,7 @@ private fun QuickIcon(icon: ImageVector, label: String, active: Boolean, enabled
 @Composable
 fun MiniToolbar(ui: EditorUiState, d: Dispatcher, modifier: Modifier = Modifier) {
     val st = ui.state ?: return
-    Surface(modifier, shape = RoundedCornerShape(10.dp), color = Color.White, shadowElevation = 10.dp, tonalElevation = 2.dp) {
+    Surface(modifier, shape = RoundedCornerShape(10.dp), color = SurfaceWhite, shadowElevation = 10.dp, tonalElevation = 2.dp) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Combo(st.font ?: "Calibri", 104, FONTS.map { f -> MenuEntry(f) { d.id("format.font", mapOf("name" to f)) } })
             Spacer(Modifier.width(4.dp))
@@ -103,7 +103,7 @@ fun ProofBar(ui: EditorUiState, vm: EditorViewModel, modifier: Modifier = Modifi
     val issue = ui.issue ?: return
     val suggestions = remember(issue) { issue.optJSONArray("suggestions")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty() }
     val grammar = issue.optString("kind") == "grammar"
-    Surface(modifier, shape = RoundedCornerShape(10.dp), color = Color.White, shadowElevation = 10.dp, tonalElevation = 2.dp) {
+    Surface(modifier, shape = RoundedCornerShape(10.dp), color = SurfaceWhite, shadowElevation = 10.dp, tonalElevation = 2.dp) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(

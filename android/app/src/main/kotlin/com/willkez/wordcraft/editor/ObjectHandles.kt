@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.willkez.wordcraft.ui.WordBlue
 import com.willkez.wordcraft.bridge.ObjRect
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
@@ -69,9 +70,22 @@ fun ObjectHandles(
     /** A vector in the object's own (turned) axes, in page axes. */
     fun toPage(dx: Float, dy: Float) = Offset(dx * cosT - dy * sinT, dx * sinT + dy * cosT)
 
+    // If the engine keeps the old size (it refused, or changed nothing), the dragged frame must not stay where the
+    // finger left it: after a moment it snaps back to what the engine says.
+    val latest by rememberUpdatedState(obj)
+    var settle by remember { mutableIntStateOf(0) }
+    LaunchedEffect(settle) {
+        if (settle > 0) {
+            delay(900)
+            val o = latest
+            cx = o.x + o.w / 2f; cy = o.y + o.h / 2f; w = o.w; h = o.h
+        }
+    }
+
     fun commit() {
         val moved = floating && (abs(cx - cx0) > 0.01f || abs(cy - cy0) > 0.01f)
         onCommit(cx - w / 2f, cy - h / 2f, w, h, moved)
+        settle++
     }
 
     Box(

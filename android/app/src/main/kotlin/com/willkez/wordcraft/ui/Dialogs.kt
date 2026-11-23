@@ -90,7 +90,7 @@ fun ResultDialog(title: String, text: String, onDismiss: () -> Unit) {
 fun Backstage(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, actions: EditorActions) {
     fun go(block: () -> Unit) { vm.showBackstage(false); block() }
     val autoCap by vm.autoCapitalize.collectAsState()
-    Surface(Modifier.fillMaxSize(), color = Color(0xFFF7F7F7)) {
+    Surface(Modifier.fillMaxSize(), color = RibbonBg) {
         Column(Modifier.statusBarsPadding().navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().background(WordBlue).height(52.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton({ vm.showBackstage(false) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White) }
