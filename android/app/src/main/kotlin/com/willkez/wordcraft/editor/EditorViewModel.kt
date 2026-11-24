@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import com.willkez.wordcraft.WordcraftApp
+import com.willkez.wordcraft.ai.*
 import com.willkez.wordcraft.data.DeviceDoc
 import com.willkez.wordcraft.data.DeviceDocs
 import com.willkez.wordcraft.data.DocumentStore
@@ -115,6 +116,79 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun saveTree(): Uri? = store.saveTree()
     fun setSaveTree(uri: Uri?) { store.setSaveTree(uri); _saveFolder.value = store.saveTreeName() }
     fun setAskEveryTime(on: Boolean) { store.askEveryTime = on; _askEveryTime.value = on }
+
+    // ---- AI assistant ---------------------------------------------------------------------------
+    // The model proposes engine commands (or streams text); the engine validates and runs them, so a wrong
+    // parameter is an error message and not a damaged document. Everything an AI edit adds can be undone in one go.
+
+    private val aiTabs = listOf("Home", "Insert", "Design", "Layout", "References", "Review", "Table Design", "Table Layout", "Picture Format", "Shape Format")
+    private fun aiCommands(): List<Cmd> {
+        val r = ribbon ?: return emptyList()
+        return aiTabs.flatMap { r.tabCmds(it) }
+            .filter { c -> c.mutates && AiPrompts.BLOCKED_PREFIXES.none { c.id.startsWith(it) } }
+            .distinctBy { it.id }
+    }
+    fun aiLabel(id: String): String = ribbon?.byId?.get(id)?.label ?: id
+    fun aiSettings(): Pair<String, String> = store.aiKey() to store.aiModel()
+    fun saveAiSettings(key: String, model: String) = store.setAi(key, model)
+
+    private val _aiStreaming = MutableStateFlow(false)
+    val aiStreaming: StateFlow<Boolean> = _aiStreaming
+    private var aiJob: kotlinx.coroutines.Job? = null
+
+    /** The document's plain text for the model, trimmed to `maxChars` (start and end kept). */
+    private suspend fun aiDocumentText(maxChars: Int): String = withContext(engineThread) {
+        val s = session ?: return@withContext ""
+        val text = runCatching { String(s.export("context.txt"), Charsets.UTF_8) }.getOrDefault("")
+        if (text.length <= maxChars) text else text.take(maxChars * 2 / 3) + "\n…\n" + text.takeLast(maxChars / 3)
+    }
+
+    /** Ask the model what to do. Nothing is changed yet. */
+    suspend fun aiPlan(instruction: String): AiPlan {
+        val (key, model) = aiSettings()
+        val commands = aiCommands()
+        val st = _ui.value.state
+        val user = AiPrompts.planUser(instruction, aiDocumentText(14_000), st?.pageCount?.toInt() ?: 1, st?.wordCount?.toLong() ?: 0L)
+        val answer = GeminiClient(key, model).generateJson(AiPrompts.planSystem(commands), user)
+        return AiPrompts.parsePlan(answer, commands.map { it.id }.toSet())
+    }
+
+    /** Run a plan's steps in order; failures are collected, the rest still run. */
+    suspend fun aiApply(plan: AiPlan): AiRunResult = withContext(engineThread) {
+        val s = session ?: return@withContext AiRunResult(0, listOf("No document is open"), 0)
+        val before = s.undoDepth().toInt()
+        var applied = 0
+        val errors = ArrayList<String>()
+        for (step in plan.steps) {
+            try { s.execute(step.command, step.params.toString()); applied++ }
+            catch (e: Exception) { errors += "${aiLabel(step.command)}: ${e.message ?: "failed"}" }
+        }
+        runCatching { s.takeUiRequests() } // a bare command may ask for a dialog; an AI run never opens one
+        refresh()
+        AiRunResult(applied, errors, (s.undoDepth().toInt() - before).coerceAtLeast(0))
+    }
+
+    /** Take back the steps an AI run added. */
+    fun aiUndo(steps: Int) { if (steps > 0) run("edit.undoTo", mapOf("count" to steps)) }
+
+    /** Stream text from the model straight into the document at the caret. */
+    fun aiWrite(instruction: String, onDone: (error: String?) -> Unit) {
+        aiJob?.cancel()
+        aiJob = viewModelScope.launch {
+            _aiStreaming.value = true
+            try {
+                val (key, model) = aiSettings()
+                val user = "<document_context>\n${aiDocumentText(10_000).ifBlank { "(empty)" }}\n</document_context>\n<user_instruction>\n${instruction.trim()}\n</user_instruction>"
+                GeminiClient(key, model).stream(AiPrompts.WRITE_SYSTEM, user) { chunk -> typeText(chunk) }
+                onDone(null)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                onDone(null); throw e
+            } catch (e: Exception) {
+                onDone(e.message ?: "The AI request failed")
+            } finally { _aiStreaming.value = false }
+        }
+    }
+    fun aiStop() { aiJob?.cancel() }
 
     // ---- documents found on the device ----------------------------------------------------------
     private val _device = MutableStateFlow<List<DeviceDoc>>(emptyList())

@@ -287,6 +287,11 @@ impl MobileSession {
         s.run("edit.paste", &params).map(|_| ()).map_err(fail)
     }
 
+    /// How many undo steps the document has: lets the app undo exactly what an AI edit added.
+    pub fn undo_depth(&self) -> u64 {
+        self.lock().session.undo_depth() as u64
+    }
+
     /// Dialogs and actions the engine asked the front-end for since the last call, each a JSON object
     /// such as `{"open": "goto"}` or `{"open": "insertChart"}`. The queue is emptied by the call, so
     /// a request is delivered once. Without this, buttons whose command only *asks* for a dialog did nothing.

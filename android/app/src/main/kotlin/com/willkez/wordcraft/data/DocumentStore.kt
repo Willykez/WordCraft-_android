@@ -57,6 +57,11 @@ class DocumentStore(private val ctx: Context) {
         get() = prefs.getBoolean("auto_cap", true)
         set(v) { prefs.edit().putBoolean("auto_cap", v).apply() }
 
+    // ---- AI assistant (the user's own Gemini key; plain app-private storage) ---------------------
+    fun aiKey(): String = prefs.getString("ai_key", "").orEmpty()
+    fun aiModel(): String = prefs.getString("ai_model", "gemini-2.5-flash").orEmpty().ifBlank { "gemini-2.5-flash" }
+    fun setAi(key: String, model: String) { prefs.edit().putString("ai_key", key.trim()).putString("ai_model", model.trim()).apply() }
+
     /** A readable name for the folder ("Documents/WordCraft"). */
     fun saveTreeName(): String? = saveTree()?.let { treeLabel(it) }
 

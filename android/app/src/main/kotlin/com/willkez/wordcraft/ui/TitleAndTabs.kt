@@ -44,6 +44,7 @@ fun TitleBar(ui: EditorUiState, vm: EditorViewModel, d: Dispatcher, actions: Edi
                 Modifier.weight(1f).padding(horizontal = 6.dp), maxLines = 1, overflow = TextOverflow.Ellipsis,
                 fontSize = 15.sp, fontWeight = FontWeight.Medium,
             )
+            IconButton({ vm.openPanel("ai") }, Modifier.size(40.dp)) { Icon(Icons.Default.AutoAwesome, "AI assistant", Modifier.size(22.dp)) }
             IconButton({ vm.openPanel("search") }, Modifier.size(40.dp)) { Icon(Icons.Default.Search, "Tell me what you want to do", Modifier.size(22.dp)) }
             Box {
                 IconButton({ panelsMenu = true }, Modifier.size(40.dp)) { Icon(Icons.Default.Dashboard, "Panels", Modifier.size(22.dp)) }
