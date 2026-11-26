@@ -254,8 +254,8 @@ fun TableHandles(
         ) { Icon(Icons.Default.OpenWith, "Select table", Modifier.size(16.dp), tint = Color.White) }
     }
 
-    // Corner: scales the whole table.
-    key(geo, "corner") {
+    // Corner: scales the whole table. It belongs to the piece that holds the table's last row (the only place the engine takes it).
+    if (geo.endsHere) key(geo, "corner") {
         var dx by remember { mutableFloatStateOf(0f) }
         var dy by remember { mutableFloatStateOf(0f) }
         val right = geo.cols.lastOrNull() ?: 0f

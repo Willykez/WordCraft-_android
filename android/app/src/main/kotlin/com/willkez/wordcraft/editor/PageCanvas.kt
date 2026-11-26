@@ -82,7 +82,7 @@ fun PageCanvas(
     modifier: Modifier = Modifier,
     marks: Boolean = false,
     obj: com.willkez.wordcraft.bridge.ObjRect? = null,
-    tableGeo: com.willkez.wordcraft.bridge.TableGeo? = null,
+    tableGeos: List<com.willkez.wordcraft.bridge.TableGeo> = emptyList(),
     ruler: com.willkez.wordcraft.bridge.RulerInfo? = null,
     draw: DrawSettings? = null,
     scrollToPage: Int? = null,
@@ -219,7 +219,7 @@ fun PageCanvas(
                     obj = obj?.takeIf {
                         it.page.toInt() == index
                     },
-                    tableGeo = tableGeo?.takeIf {
+                    tableGeo = tableGeos.firstOrNull {
                         it.page.toInt() == index
                     },
                     draw = draw,

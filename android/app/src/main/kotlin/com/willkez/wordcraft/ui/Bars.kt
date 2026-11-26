@@ -24,8 +24,9 @@ import kotlin.math.roundToInt
 @Composable
 fun StatusBar(ui: EditorUiState, vm: EditorViewModel) {
     val st = ui.state
+    val writing = vm.ai.state.collectAsState().value.phase == com.willkez.wordcraft.ai.AiPhase.Writing
     Surface(color = WordBlue, contentColor = Color.White) {
-        Row(Modifier.fillMaxWidth().height(26.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row((if (writing) Modifier.aiShimmer() else Modifier).fillMaxWidth().height(26.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Page ${(ui.caret?.page?.toInt() ?: 0) + 1} of ${ui.pages.size.coerceAtLeast(1)}", fontSize = 11.sp)
             Text("${st?.wordCount ?: 0u} words", fontSize = 11.sp)
             Spacer(Modifier.weight(1f))
@@ -83,6 +84,7 @@ fun MiniToolbar(ui: EditorUiState, d: Dispatcher, modifier: Modifier = Modifier)
     val st = ui.state ?: return
     Surface(modifier, shape = RoundedCornerShape(10.dp), color = SurfaceWhite, shadowElevation = 10.dp, tonalElevation = 2.dp) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            AiQuickMenu(d.vm)
             Combo(st.font ?: "Calibri", 104, FONTS.map { f -> MenuEntry(f) { d.id("format.font", mapOf("name" to f)) } })
             Spacer(Modifier.width(4.dp))
             Combo(st.size?.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() } ?: "11", 48, SIZES.map { s -> MenuEntry("$s") { d.id("format.size", mapOf("size" to s)) } })

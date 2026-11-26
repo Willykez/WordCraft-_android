@@ -75,8 +75,8 @@ data class EditorUiState(
     val obj: ObjRect? = null,
     /** A misspelling or grammar issue under the caret, with suggested fixes. */
     val issue: JSONObject? = null,
-    /** Grid of the table under the caret, for the column/row drag handles. */
-    val tableGeo: TableGeo? = null,
+    /** The grid of the table under the caret on every page it is drawn on (a long table runs over several). */
+    val tableGeos: List<TableGeo> = emptyList(),
     /** Indents and tab stops of the caret's paragraph. */
     val ruler: RulerInfo? = null,
     val showRuler: Boolean = true,
@@ -97,6 +97,7 @@ data class EditorUiState(
 
 class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private val store = DocumentStore(app)
+    val ai = com.willkez.wordcraft.ai.AiAssistant(app, viewModelScope)
     private val _recents = MutableStateFlow(store.recents())
     val recents: StateFlow<List<RecentDoc>> = _recents
     private fun reloadRecents() { _recents.value = store.recents() }
@@ -117,78 +118,151 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun setSaveTree(uri: Uri?) { store.setSaveTree(uri); _saveFolder.value = store.saveTreeName() }
     fun setAskEveryTime(on: Boolean) { store.askEveryTime = on; _askEveryTime.value = on }
 
-    // ---- AI assistant ---------------------------------------------------------------------------
-    // The model proposes engine commands (or streams text); the engine validates and runs them, so a wrong
-    // parameter is an error message and not a damaged document. Everything an AI edit adds can be undone in one go.
+    // ---- AI assistant: it reads the selection and text, and writes only through one grouped (single-Undo) command ----
 
-    private val aiTabs = listOf("Home", "Insert", "Design", "Layout", "References", "Review", "Table Design", "Table Layout", "Picture Format", "Shape Format")
-    private fun aiCommands(): List<Cmd> {
+    private fun withAiContext(block: (com.willkez.wordcraft.ai.AiContext) -> Unit) = launchEngine(bumpEpoch = false) {
+        val s = session ?: return@launchEngine
+        // "Share the document text" off: only the selection leaves the device.
+        val ctx = com.willkez.wordcraft.ai.AiContext(s.selectedText(), if (ai.config.value.shareDocument) s.documentText() else "")
+        withContext(Dispatchers.Main) { block(ctx) }
+    }
+
+    /** Live writing: the assistant's commands run on the engine thread, and the whole generation is one Undo step. */
+    private fun liveSink(ctx: com.willkez.wordcraft.ai.AiContext) = object : com.willkez.wordcraft.ai.LiveSink {
+        private var mark = 0UL
+        private var deleteFirst = false
+        private var breakFirst = false
+
+        override suspend fun begin(replaceSelection: Boolean, newParagraph: Boolean) = withContext(engineThread) {
+            commandEpoch.incrementAndGet()
+            val s = session
+            mark = s?.undoMark() ?: 0UL
+            deleteFirst = replaceSelection
+            // Writing where there is already text: start a paragraph of its own rather than glueing onto it.
+            breakFirst = newParagraph && !replaceSelection && s != null && !s.caretParagraphEmpty()
+        }
+
+        override suspend fun apply(commands: List<org.json.JSONObject>): String? = withContext(engineThread) {
+            val s = session ?: return@withContext "No document is open."
+            var list = commands
+            if (breakFirst) {
+                breakFirst = false
+                list = listOf(org.json.JSONObject().put("cmd", "text.newParagraph").put("params", org.json.JSONObject())) + list
+            }
+            if (deleteFirst) {
+                deleteFirst = false
+                list = listOf(org.json.JSONObject().put("cmd", "text.delete").put("params", org.json.JSONObject())) + list
+            }
+            var note: String? = null
+            try {
+                s.runGroup(org.json.JSONArray(list).toString())
+            } catch (e: Exception) {
+                // One command the engine refused (an unknown style, say) must not lose the text: run the rest one by one.
+                list.forEach { c ->
+                    try { s.execute(c.getString("cmd"), c.optJSONObject("params")?.toString().orEmpty()) }
+                    catch (x: Exception) { if (note == null) note = "${c.getString("cmd")}: ${x.message}" }
+                }
+            }
+            refresh()
+            note
+        }
+
+        override suspend fun end() = withContext(engineThread) {
+            session?.mergeUndoSince(mark)
+            refresh()
+        }
+    }
+
+    fun aiText(task: com.willkez.wordcraft.ai.TextTask) = withAiContext { ctx ->
+        if (task.needsSelection && ctx.selection.isEmpty()) say("Select some text first.") else ai.runTask(task, ctx, liveSink(ctx))
+    }
+
+    /** A free request, written straight onto the page. */
+    fun aiAsk(instruction: String) = withAiContext { ctx -> ai.runAsk(instruction, ctx, liveSink(ctx)) }
+
+    /** A question about the document, answered in the sheet. The document is not changed. */
+    fun aiQuestion(question: String) = withAiContext { ctx -> ai.runQuestion(question, ctx) }
+
+    /** Put an answer from the sheet onto the page at the cursor, as one Undo step. */
+    fun aiInsertAnswer(text: String) = launchEngine {
+        val s = session ?: return@launchEngine
+        val mark = s.undoMark()
+        insertRaw(s, text)
+        s.mergeUndoSince(mark)
+        refresh()
+    }
+
+    fun aiContinue() = withAiContext { ctx -> ai.continueLive(ctx, liveSink(ctx)) }
+
+    /** Undo everything the assistant just wrote, in one step. */
+    fun aiUndoWrite() { ai.reset(); undo() }
+
+    /** The review flow: a list of proposed changes. */
+    fun aiReview(instruction: String) = withAiContext { ctx -> ai.runStructured(instruction, ctx) }
+
+    /** Fix grammar with nothing selected: the whole document, as small find-and-replace changes that keep tables and formatting. */
+    fun aiFixDocument() = withAiContext { ctx ->
+        ai.runStructured("Fix spelling, grammar and punctuation across the whole document using replace operations only. Do not change wording or style.", ctx)
+    }
+
+    /** Apply operations as one Undo step. [onDone] gets an error message, or null on success. */
+    fun aiApply(commandsJson: String, onDone: (String?) -> Unit) = launchEngine {
+        val s = session ?: return@launchEngine
+        try {
+            s.runGroup(commandsJson)
+            refresh()
+            withContext(Dispatchers.Main) { onDone(null) }
+        } catch (e: Exception) {
+            refresh()
+            withContext(Dispatchers.Main) { onDone(e.message ?: "The change could not be applied.") }
+        }
+    }
+
+
+    // ---- AI command agent ------------------------------------------------------------------------
+    // Where live writing (above) types text and Markdown onto the page, the agent drives the editor itself: the model
+    // picks engine commands (page borders, themes, fonts, strikethrough, links, table styling...), the engine checks every
+    // parameter, and the whole run is one Undo step. It reads the selection too, so "make this bold" means what it says.
+
+    private val agentTabs = listOf("Home", "Insert", "Design", "Layout", "References", "Review", "Table Design", "Table Layout", "Picture Format", "Shape Format")
+    private fun agentCommands(): List<Cmd> {
         val r = ribbon ?: return emptyList()
-        return aiTabs.flatMap { r.tabCmds(it) }
-            .filter { c -> c.mutates && AiPrompts.BLOCKED_PREFIXES.none { c.id.startsWith(it) } }
+        return agentTabs.flatMap { r.tabCmds(it) }
+            .filter { c -> c.mutates && AgentPrompts.BLOCKED_PREFIXES.none { c.id.startsWith(it) } }
             .distinctBy { it.id }
     }
-    fun aiLabel(id: String): String = ribbon?.byId?.get(id)?.label ?: id
-    fun aiSettings(): Pair<String, String> = store.aiKey() to store.aiModel()
-    fun saveAiSettings(key: String, model: String) = store.setAi(key, model)
+    fun agentLabel(id: String): String = ribbon?.byId?.get(id)?.label ?: id
 
-    private val _aiStreaming = MutableStateFlow(false)
-    val aiStreaming: StateFlow<Boolean> = _aiStreaming
-    private var aiJob: kotlinx.coroutines.Job? = null
-
-    /** The document's plain text for the model, trimmed to `maxChars` (start and end kept). */
-    private suspend fun aiDocumentText(maxChars: Int): String = withContext(engineThread) {
-        val s = session ?: return@withContext ""
-        val text = runCatching { String(s.export("context.txt"), Charsets.UTF_8) }.getOrDefault("")
-        if (text.length <= maxChars) text else text.take(maxChars * 2 / 3) + "\n…\n" + text.takeLast(maxChars / 3)
-    }
-
-    /** Ask the model what to do. Nothing is changed yet. */
-    suspend fun aiPlan(instruction: String): AiPlan {
-        val (key, model) = aiSettings()
-        val commands = aiCommands()
+    /** Ask the model what to do. Nothing in the document changes yet. */
+    suspend fun agentPlan(instruction: String): AgentPlan {
+        val provider = ai.providerOrNull() ?: throw IllegalStateException("Set up an AI provider first (the gear icon).")
+        val commands = agentCommands()
+        val share = ai.config.value.shareDocument
+        val ctx = withContext(engineThread) { session?.let { AiContext(it.selectedText(), if (share) it.documentText() else "") } } ?: AiContext("", "")
         val st = _ui.value.state
-        val user = AiPrompts.planUser(instruction, aiDocumentText(14_000), st?.pageCount?.toInt() ?: 1, st?.wordCount?.toLong() ?: 0L)
-        val answer = GeminiClient(key, model).generateJson(AiPrompts.planSystem(commands), user)
-        return AiPrompts.parsePlan(answer, commands.map { it.id }.toSet())
+        val user = AgentPrompts.planUser(instruction, ctx.document.take(14_000), ctx.selection.take(4_000), st?.pageCount?.toInt() ?: 1, st?.wordCount?.toLong() ?: 0L)
+        val answer = StringBuilder()
+        provider.stream(AgentPrompts.planSystem(commands), user, json = true, maxOutputTokens = 8192, temperature = 0.2)
+            .collect { answer.append(it.text) }
+        return AgentPrompts.parsePlan(answer.toString(), commands.map { it.id }.toSet())
     }
 
-    /** Run a plan's steps in order; failures are collected, the rest still run. */
-    suspend fun aiApply(plan: AiPlan): AiRunResult = withContext(engineThread) {
-        val s = session ?: return@withContext AiRunResult(0, listOf("No document is open"), 0)
-        val before = s.undoDepth().toInt()
+    /** Run a plan's steps in order as ONE undo step; a step the engine refuses is reported and the rest still run. */
+    suspend fun agentApply(plan: AgentPlan): AgentRunResult = withContext(engineThread) {
+        val s = session ?: return@withContext AgentRunResult(0, listOf("No document is open"))
+        commandEpoch.incrementAndGet()
+        val mark = s.undoMark()
         var applied = 0
         val errors = ArrayList<String>()
         for (step in plan.steps) {
             try { s.execute(step.command, step.params.toString()); applied++ }
-            catch (e: Exception) { errors += "${aiLabel(step.command)}: ${e.message ?: "failed"}" }
+            catch (e: Exception) { errors += "${agentLabel(step.command)}: ${e.message ?: "failed"}" }
         }
-        runCatching { s.takeUiRequests() } // a bare command may ask for a dialog; an AI run never opens one
+        runCatching { s.takeUiRequests() } // a bare command may ask for a dialog; an agent run never opens one
+        s.mergeUndoSince(mark)
         refresh()
-        AiRunResult(applied, errors, (s.undoDepth().toInt() - before).coerceAtLeast(0))
+        AgentRunResult(applied, errors)
     }
-
-    /** Take back the steps an AI run added. */
-    fun aiUndo(steps: Int) { if (steps > 0) run("edit.undoTo", mapOf("count" to steps)) }
-
-    /** Stream text from the model straight into the document at the caret. */
-    fun aiWrite(instruction: String, onDone: (error: String?) -> Unit) {
-        aiJob?.cancel()
-        aiJob = viewModelScope.launch {
-            _aiStreaming.value = true
-            try {
-                val (key, model) = aiSettings()
-                val user = "<document_context>\n${aiDocumentText(10_000).ifBlank { "(empty)" }}\n</document_context>\n<user_instruction>\n${instruction.trim()}\n</user_instruction>"
-                GeminiClient(key, model).stream(AiPrompts.WRITE_SYSTEM, user) { chunk -> typeText(chunk) }
-                onDone(null)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                onDone(null); throw e
-            } catch (e: Exception) {
-                onDone(e.message ?: "The AI request failed")
-            } finally { _aiStreaming.value = false }
-        }
-    }
-    fun aiStop() { aiJob?.cancel() }
 
     // ---- documents found on the device ----------------------------------------------------------
     private val _device = MutableStateFlow<List<DeviceDoc>>(emptyList())
@@ -787,6 +861,6 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         val st = s.state()
         if (st.dirty) scheduleAutosave()
         val en = if (watched.isEmpty()) emptySet() else s.enabledAmong(watched).toSet()
-        _ui.update { it.copy(pages = s.pages(), state = st, caret = s.caret(), selection = s.selectionRects(), obj = s.selectedObject(), tableGeo = if (st.inTable) s.tableGeometry() else null, ruler = if (it.showRuler) s.rulerInfo() else null, ribbon = ribbon, enabled = en, watched = watched.toSet()) }
+        _ui.update { it.copy(pages = s.pages(), state = st, caret = s.caret(), selection = s.selectionRects(), obj = s.selectedObject(), tableGeos = if (st.inTable) s.tableGeometry() else emptyList(), ruler = if (it.showRuler) s.rulerInfo() else null, ribbon = ribbon, enabled = en, watched = watched.toSet()) }
     }
 }

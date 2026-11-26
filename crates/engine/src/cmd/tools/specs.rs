@@ -224,17 +224,50 @@ pub fn specs() -> Vec<CommandSpec> {
             let cols = rows.iter().map(Vec::len).max().unwrap_or(1).clamp(1, 63);
             s.run("insert.table", &json!({"rows": rows.len().max(1), "cols": cols, "style": "GridTable1Light"}))?;
             let Some((tp, _, _)) = s.sel.focus.path.cell() else { return sel_result(s) };
-            let t = s.doc.table_mut(s.sel.focus.story, &tp)?;
+            let story = s.sel.focus.story;
+            let tidy = p::bool(v, "tidy").unwrap_or(false);
+            // A column of figures (every cell under the header is a number) is aligned right as a whole, header included.
+            let numeric_col: Vec<bool> = (0..cols)
+                .map(|c| {
+                    let body: Vec<&str> = rows.iter().skip(1).filter_map(|r| r.get(c)).map(String::as_str).filter(|x| !x.trim().is_empty()).collect();
+                    !body.is_empty() && body.iter().all(|x| looks_numeric(x))
+                })
+                .collect();
+            let t = s.doc.table_mut(story, &tp)?;
             for (r, row) in rows.iter().enumerate() {
                 for (c, val) in row.iter().enumerate() {
                     if let Some(cell) = t.rows.get_mut(r).and_then(|x| x.cells.get_mut(c)) {
-                        cell.blocks = vec![para_block(Paragraph::with_text(val, CharProps::default()))];
+                        let mut para = Paragraph::with_text(val, CharProps::default());
+                        // Figures line up on the right, like in a spreadsheet.
+                        if tidy && numeric_col.get(c).copied().unwrap_or(false) {
+                            para.props.align = Some(wordcraft_doc::props::Align::Right);
+                        }
+                        cell.blocks = vec![para_block(para)];
                     }
+                }
+            }
+            if tidy {
+                // The caret is still in the first cell. Size each column to its own content (a narrow one for numbers, a wide
+                // one for names and sentences), within the text column, so the table is never wider than the page allows.
+                // Then repeat the header row on every page and give it a header look. Each step is optional.
+                let _ = s.run("table.autofit", &json!({"mode": "contents"}));
+                let _ = s.run("table.repeatHeader", &json!({"value": true}));
+                let _ = s.run("table.style", &json!({"style": "GridTable4AccentBlue"}));
+            }
+            // `after`: leave the caret in the paragraph that follows the table, so more can be written below it.
+            if p::bool(v, "after").unwrap_or(false) {
+                let mut next = tp.0.clone();
+                if let Some(last) = next.last_mut() {
+                    *last += 1;
+                }
+                let pos = wordcraft_doc::Pos { story, path: wordcraft_doc::Path(next), off: 0 };
+                if s.doc.para_at(&pos).is_some() {
+                    s.sel = Selection::caret(pos);
                 }
             }
             sel_result(s)
         })
-        .params(r#"{"csv"?: string}"#),
+        .params(r#"{"csv"?: string, "after"?: bool (put the caret below the table), "tidy"?: bool (columns sized to their content within the text width, repeat the header row, right-align figure columns)}"#),
         CommandSpec::new("layout.linkToPrevious", "Link to Previous", "Header & Footer › Navigation", |s, v| {
             let header = p::bool(v, "footer").map(|f| !f).unwrap_or(true);
             let block = s.sel.focus.path.0.first().copied().unwrap_or(0) as usize;
@@ -393,4 +426,10 @@ pub fn specs() -> Vec<CommandSpec> {
         })
         .pure(),
     ]
+}
+
+/// A cell that holds a number (with an optional currency sign, percent sign or thousands separators).
+fn looks_numeric(t: &str) -> bool {
+    let s: String = t.trim().chars().filter(|c| !matches!(c, '$' | '€' | '£' | '%' | ',' | ' ')).collect();
+    !s.is_empty() && s.parse::<f64>().is_ok()
 }

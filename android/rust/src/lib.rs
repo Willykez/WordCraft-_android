@@ -91,6 +91,8 @@ pub struct TableGeo {
     pub row_bottoms: Vec<f32>,
     pub top: f32,
     pub bottom: f32,
+    /// This piece holds the table's last row; only then does the scale corner belong to it.
+    pub ends_here: bool,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -287,9 +289,55 @@ impl MobileSession {
         s.run("edit.paste", &params).map(|_| ()).map_err(fail)
     }
 
-    /// How many undo steps the document has: lets the app undo exactly what an AI edit added.
-    pub fn undo_depth(&self) -> u64 {
-        self.lock().session.undo_depth() as u64
+    /// Whether the paragraph under the caret has no text: the assistant then writes into it instead of starting another.
+    pub fn caret_paragraph_empty(&self) -> bool {
+        let g = self.lock();
+        g.session.doc.para_at(&g.session.sel.focus).is_none_or(|p| p.len() == 0)
+    }
+
+    /// The whole body text, paragraphs separated by `\n` (table cells by `\t`): what the AI assistant reads.
+    pub fn document_text(&self) -> String {
+        self.lock().session.doc.plain_text(wordcraft_engine::doc::StoryRef::Body)
+    }
+
+    /// Where the undo history stands now; pass it to [`Self::merge_undo_since`] when a long edit is done.
+    pub fn undo_mark(&self) -> u64 {
+        self.lock().session.undo_mark()
+    }
+
+    /// Make every step recorded since `mark` a single undo step (a live AI generation undoes in one go).
+    pub fn merge_undo_since(&self, mark: u64) {
+        self.lock().session.merge_undo_since(mark);
+    }
+
+    /// Run several commands as ONE undo step (an AI edit that inserts text, a table and a chart
+    /// undoes in a single Ctrl+Z). `ops_json` is `[{"cmd": id, "params": {...}}, ...]`. If any
+    /// command fails, everything the group did is undone and the error is returned.
+    pub fn run_group(&self, ops_json: String) -> Result<String, BridgeError> {
+        let ops: Vec<Value> = serde_json::from_str(&ops_json).map_err(fail)?;
+        let mut g = self.lock();
+        let s = &mut g.session;
+        let mark = s.undo_mark();
+        let mut results = Vec::with_capacity(ops.len());
+        for op in &ops {
+            let Some(cmd) = op.get("cmd").and_then(Value::as_str) else {
+                return Err(fail("operation without `cmd`"));
+            };
+            let params = op.get("params").cloned().unwrap_or_else(|| json!({}));
+            match s.run(cmd, &params) {
+                Ok(v) => results.push(v),
+                Err(e) => {
+                    s.merge_undo_since(mark);
+                    // Only roll back what this group did, never an earlier step of the user's.
+                    if s.undo_mark() > mark {
+                        s.undo();
+                    }
+                    return Err(fail(e));
+                }
+            }
+        }
+        s.merge_undo_since(mark);
+        Ok(Value::Array(results).to_string())
     }
 
     /// Dialogs and actions the engine asked the front-end for since the last call, each a JSON object
@@ -495,19 +543,26 @@ impl MobileSession {
     }
 
     /// The table under the caret: its grid lines on the caret's page, so the UI can offer drag handles.
-    pub fn table_geometry(&self) -> Option<TableGeo> {
-        let c = self.caret()?;
+    pub fn table_geometry(&self) -> Vec<TableGeo> {
         let mut g = self.lock();
         let s = &mut g.session;
+        let Some((tp, _, _)) = s.sel.focus.path.cell() else { return Vec::new() };
+        let story = s.sel.focus.story;
         let l = s.layout();
-        let t = wordcraft_engine::cmd::table_resize::table_under(&l, &s.doc, c.page as usize, c.x, c.y + c.height / 2.0, 0.0)?;
-        Some(TableGeo {
-            page: c.page,
-            cols: t.cols.clone(),
-            row_bottoms: t.rows.iter().map(|r| r.bottom).collect(),
-            top: t.top(),
-            bottom: t.bottom(),
-        })
+        // One entry per page the table is drawn on, so a table that runs over several pages is live on all of them.
+        wordcraft_engine::cmd::table_resize::fragments_of(&l, &s.doc, story, &tp)
+            .into_iter()
+            .filter_map(|(page, t)| {
+                Some(TableGeo {
+                    page: u32::try_from(page).ok()?,
+                    cols: t.cols.clone(),
+                    row_bottoms: t.rows.iter().map(|r| r.bottom).collect(),
+                    top: t.top(),
+                    bottom: t.bottom(),
+                    ends_here: t.ends_here,
+                })
+            })
+            .collect()
     }
 
     /// Indents, tab stops and the text column for the ruler.

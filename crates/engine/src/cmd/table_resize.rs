@@ -423,6 +423,20 @@ pub(crate) fn tables_on(l: &DocLayout, doc: &Document, page: usize) -> Vec<Resiz
         .collect()
 }
 
+/// Every page fragment of one table, as `(page index, geometry there)`: a table that runs over several pages
+/// is drawn in pieces, and each piece needs its own handles.
+pub fn fragments_of(l: &DocLayout, doc: &Document, story: StoryRef, table: &Path) -> Vec<(usize, ResizeTarget)> {
+    (0..l.pages.len())
+        .flat_map(|page| {
+            tables_on(l, doc, page)
+                .into_iter()
+                .filter(|t| t.story == story && t.table == *table)
+                .map(move |t| (page, t))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 fn on_handle(t: &ResizeTarget, x: f32, y: f32, reach: f32) -> bool {
     let h = t.handle();
     t.ends_here && x >= h.x - reach / 2.0 && x <= h.right() + reach / 2.0 && y >= h.y - reach / 2.0 && y <= h.bottom() + reach / 2.0

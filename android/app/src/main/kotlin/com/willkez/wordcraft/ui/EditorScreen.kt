@@ -51,7 +51,7 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 PageCanvas(
                     vm = vm, pages = ui.pages, caret = ui.caret, selection = ui.selection,
-                    revision = st?.revision ?: 0uL, zoom = ui.zoom, onZoom = vm::setZoom, marks = st?.showMarks == true, obj = ui.obj, tableGeo = ui.tableGeo, ruler = ui.ruler,
+                    revision = st?.revision ?: 0uL, zoom = ui.zoom, onZoom = vm::setZoom, marks = st?.showMarks == true, obj = ui.obj, tableGeos = ui.tableGeos, ruler = ui.ruler,
                     scrollToPage = ui.scrollToPage, scrollTick = ui.scrollTick,
                     draw = ui.drawTool?.let { com.willkez.wordcraft.editor.DrawSettings(it, ui.drawColor, ui.drawWidth, ui.stylusOnly) },
                     onTapped = { typingReset++; runCatching { focus.requestFocus() }; keyboard?.show(); keyboardShown = true },
@@ -77,6 +77,8 @@ fun EditorScreen(vm: EditorViewModel, actions: EditorActions) {
                 }
                 PanelHost(ui, vm, d, Modifier.fillMaxSize())
                 SheetHost(ui, vm, d)
+                if (vm.ai.state.collectAsState().value.phase == com.willkez.wordcraft.ai.AiPhase.Writing) AiGlowEdge(Modifier.align(Alignment.BottomCenter))
+                AiLiveBar(vm, Modifier.align(Alignment.BottomCenter))
                 // While a header or footer is being edited, Word offers a way back to the body.
                 if ("insert.closeHeader" in ui.enabled) {
                     FilledTonalButton(
