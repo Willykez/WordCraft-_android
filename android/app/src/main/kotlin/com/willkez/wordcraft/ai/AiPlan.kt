@@ -100,7 +100,7 @@ object AiPlans {
      */
     fun commands(ops: List<AiOp>): JSONArray {
         val out = JSONArray()
-        fun cmd(id: String, params: JSONObject) { out.put(JSONObject().put("cmd", id).put("params", params)) }
+        fun cmd(id: String, params: JSONObject = JSONObject()) { out.put(JSONObject().put("cmd", id).put("params", params)) }
         fun paragraphs(t: String) = t.replace("\r", "").replace(Regex("\n{2,}"), "\n").trim('\n')
 
         for (op in ops) when (op) {
